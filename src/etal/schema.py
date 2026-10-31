@@ -575,7 +575,8 @@ def _validate_presentations(data: VaultData, out: list[Problem], ambiguous: Call
         _enum(out, pres, "audience", pres.audience_own, AUDIENCES)
         event = pres.event
         if pres.date is not None and event is not None and event.start is not None and event.effective_end is not None:
-            if pres.date.first_day() < event.start.first_day() or pres.date.last_day() > event.effective_end.last_day():
+            # Overlap, not containment: a month-only date is in range if any day of it falls in the event.
+            if pres.date.last_day() < event.start.first_day() or pres.date.first_day() > event.effective_end.last_day():
                 span = str(event.start) if event.effective_end == event.start else f"{event.start} to {event.effective_end}"
                 out.append(Problem(pres.note.path, "date", f"{pres.date} is outside {event.note.name} ({span})"))
         ambiguous(pres, "coauthors", pres.coauthors)

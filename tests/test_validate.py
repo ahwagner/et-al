@@ -100,8 +100,8 @@ def test_presentation_date_boundaries(vault_path):
     # The CGC event runs 2026-08-01 to 2026-08-05.
     for date, outside in [
         ("2026-07-31", True), ("2026-08-01", False), ("2026-08-05", False), ("2026-08-06", True),
-        # A month-precision date is in range only if the whole month is: August is not inside five days.
-        ("2026-08", True),
+        # A month-precision date is in range when any day of the month falls inside the event.
+        ("2026-08", False), ("2026-07", True), ("2026-09", True),
     ]:
         edit(vault_path, PRES, CLINVAR, "date: 2026-08-03", f"date: {date}")
         assert (((CLINVAR, "date") in problems(vault_path)) == outside), date
