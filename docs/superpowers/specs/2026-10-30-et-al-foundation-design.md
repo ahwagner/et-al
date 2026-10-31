@@ -369,7 +369,7 @@ Matching, in order:
 2. Normalized title equality (lowercase, punctuation and whitespace collapsed, diacritics folded).
 3. Nothing else. Fuzzy matching is deliberately absent; near misses are reported for a human to resolve by adding `scholar_id`.
 
-For each match: set `citations` and `citations_as_of`, write `scholar_id` if missing, append a history row, and append "Google Scholar, YYYY-MM-DD" to `sources` if the last entry is not already a Scholar line. Frontmatter is rewritten with the original key order and other properties untouched. The body is never modified.
+For each match: set `citations` and `citations_as_of`, write `scholar_id` if missing, append a history row, and append "Google Scholar, YYYY-MM-DD" to `sources` if the last entry is not already a Scholar line. When `ETAL_SCHOLAR_FIXTURE` replays a recorded profile instead of the network, the command says so on its first line and the `sources` entry reads "Scholar fixture <file>, YYYY-MM-DD", so a replay can never pass for real Scholar data. Frontmatter is rewritten with the original key order and other properties untouched; an existing `sources` list is appended to in place. The body is never modified. The summary names every file written, including the history CSV.
 
 Output: a table of updated notes with old and new counts, then two lists: Scholar works with no note, and notes with no Scholar match. `--only NOTE` restricts the run.
 
