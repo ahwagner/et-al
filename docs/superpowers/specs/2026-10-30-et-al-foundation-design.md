@@ -1,7 +1,7 @@
 # et-al foundation design
 
 Date: 2026-10-30, revised 2026-10-31
-Status: approved design with revisions from Alex's review, awaiting implementation plan
+Status: approved; implementation plan at docs/superpowers/plans/2026-10-31-et-al-foundation.md
 Scope: sub-project 1 of 4 (see "Roadmap" at the end)
 
 ## Purpose
