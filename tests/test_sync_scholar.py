@@ -3,7 +3,7 @@ import datetime as dt
 from pathlib import Path
 from click.testing import CliRunner
 from etal.cli import main
-from etal.sync.scholar import normalize_title, works_from_json, match, plan, apply, last_sync_date
+from etal.sync.scholar import SCHOLAR_SOURCE, normalize_title, works_from_json, match, plan, apply, last_sync_date
 from etal.vault import read_note, read_csv_rows
 
 FIX = Path(__file__).parent / "fixtures" / "scholar" / "profile.json"
@@ -28,8 +28,9 @@ def test_plan_lists_only_changes(data):
     assert len(changes) == 6
 
 def test_apply_writes_frontmatter_history_and_sources(vault_path, data):
+    assert SCHOLAR_SOURCE == "Google Scholar"
     r = match(works_from_json(FIX), data.publications)
-    apply(data, r, dt.date(2026, 10, 31), dry_run=False)
+    apply(data, r, dt.date(2026, 10, 31), dry_run=False, source=SCHOLAR_SOURCE)
     n = read_note(vault_path / "Outputs" / "Publications" / "2024 DGIdb 5.0.md")
     assert n.frontmatter["citations"] == 470 and n.frontmatter["scholar_id"] == "cwG4QRAAAAAJ:dgidb5"
     assert str(n.frontmatter["citations_as_of"]) == "2026-10-31"
@@ -41,10 +42,10 @@ def test_apply_writes_frontmatter_history_and_sources(vault_path, data):
 
 def test_sources_not_duplicated_on_second_run(vault_path, data):
     r = match(works_from_json(FIX), data.publications)
-    apply(data, r, dt.date(2026, 10, 31), dry_run=False)
+    apply(data, r, dt.date(2026, 10, 31), dry_run=False, source=SCHOLAR_SOURCE)
     from etal import schema; from etal.config import load_config
     data2 = schema.load(load_config(vault_path))
-    apply(data2, match(works_from_json(FIX), data2.publications), dt.date(2026, 11, 1), dry_run=False)
+    apply(data2, match(works_from_json(FIX), data2.publications), dt.date(2026, 11, 1), dry_run=False, source=SCHOLAR_SOURCE)
     n = read_note(vault_path / "Outputs" / "Publications" / "2024 DGIdb 5.0.md")
     assert [s for s in n.frontmatter["sources"] if s.startswith("Google Scholar")] == ["Google Scholar, 2026-10-31"]
 
@@ -75,9 +76,13 @@ def test_cli_network_failure_writes_nothing(vault_path, monkeypatch):
     import etal.sync.scholar as s
     def boom(profile_id): raise s.FetchError("blocked")
     monkeypatch.setattr(s, "fetch", boom)
+    notes = sorted((vault_path / "Outputs" / "Publications").glob("*.md"))
+    before = {p: p.read_bytes() for p in notes}
     r = CliRunner().invoke(main, ["--vault", str(vault_path), "sync", "scholar"], env={"ETAL_TODAY": "2026-10-31"})
     assert r.exit_code == 2 and "blocked" in r.output
     assert not (vault_path / "Outputs" / "citation-history.csv").exists()
+    assert sorted((vault_path / "Outputs" / "Publications").glob("*.md")) == notes
+    assert {p: p.read_bytes() for p in notes} == before
 
 def test_empty_profile(vault_path, tmp_path):
     fixed(vault_path)
@@ -102,3 +107,92 @@ def test_cli_dry_run_writes_nothing(vault_path):
     assert r.exit_code == 0 and "2024 DGIdb 5.0" in r.output and "470" in r.output
     assert target.read_text() == before
     assert not (vault_path / "Outputs" / "citation-history.csv").exists()
+
+
+def test_apply_appends_to_sources_in_place(vault_path):
+    from etal import schema
+    from etal.config import load_config
+    path = vault_path / "Outputs" / "Publications" / "2016 SAT1.md"
+    text = path.read_text()
+    assert "sources: []" in text
+    old_sources = 'sources:\n  - PubMed record, 2026-10-31  # checked by hand\n  - "Paper Citations sheet, read 2026-10-31"\n  - 2016\n'
+    path.write_text(text.replace("sources: []\n", old_sources, 1))
+    data = schema.load(load_config(vault_path))
+    apply(data, match(works_from_json(FIX), data.publications), dt.date(2026, 10, 31), dry_run=False)
+    after = path.read_text()
+    assert old_sources + "  - Google Scholar, 2026-10-31\n" in after
+    n = read_note(path)
+    assert n.frontmatter["sources"][2] == 2016
+
+
+def test_apply_keeps_flow_style_sources(vault_path):
+    from etal import schema
+    from etal.config import load_config
+    path = vault_path / "Outputs" / "Publications" / "2016 SAT1.md"
+    path.write_text(path.read_text().replace("sources: []\n", "sources: [PubMed record 2026-10-31]\n", 1))
+    data = schema.load(load_config(vault_path))
+    apply(data, match(works_from_json(FIX), data.publications), dt.date(2026, 10, 31), dry_run=False)
+    assert "sources: [PubMed record 2026-10-31, 'Google Scholar, 2026-10-31']\n" in path.read_text()
+
+
+def test_two_works_sharing_a_title_leave_the_note_unmatched(data):
+    from etal.sync.scholar import ScholarWork
+    sat1 = data.by_name["publications"]["2016 SAT1"]
+    works = [ScholarWork("x:1", sat1.title, 2016, 11), ScholarWork("x:2", sat1.title.upper(), 2016, 3)]
+    r = match(works, [sat1])
+    assert r.matched == []
+    assert [p.note.name for p in r.unmatched_pubs] == ["2016 SAT1"]
+    assert [w.scholar_id for w in r.unmatched_works] == ["x:1", "x:2"]
+
+
+def test_apply_uses_the_source_label_given(vault_path, data):
+    r = match(works_from_json(FIX), data.publications)
+    apply(data, r, dt.date(2026, 10, 31), dry_run=False, source="Scholar fixture profile.json")
+    n = read_note(vault_path / "Outputs" / "Publications" / "2024 DGIdb 5.0.md")
+    assert list(n.frontmatter["sources"])[-1] == "Scholar fixture profile.json, 2026-10-31"
+    from etal import schema
+    from etal.config import load_config
+    data2 = schema.load(load_config(vault_path))
+    apply(data2, match(works_from_json(FIX), data2.publications), dt.date(2026, 11, 1), dry_run=False,
+          source="Scholar fixture profile.json")
+    n = read_note(vault_path / "Outputs" / "Publications" / "2024 DGIdb 5.0.md")
+    assert [s for s in n.frontmatter["sources"] if s.startswith("Scholar fixture")] == ["Scholar fixture profile.json, 2026-10-31"]
+
+
+def test_cli_fixture_banner_and_label(vault_path):
+    fixed(vault_path)
+    env = {"ETAL_SCHOLAR_FIXTURE": str(FIX), "ETAL_TODAY": "2026-10-31"}
+    r = CliRunner().invoke(main, ["--vault", str(vault_path), "sync", "scholar"], env=env)
+    assert r.exit_code == 0, r.output
+    assert r.output.splitlines()[0] == f"Reading Scholar works from fixture {FIX}"
+    n = read_note(vault_path / "Outputs" / "Publications" / "2024 DGIdb 5.0.md")
+    assert list(n.frontmatter["sources"])[-1] == "Scholar fixture profile.json, 2026-10-31"
+    assert not any(str(s).startswith("Google Scholar") for s in n.frontmatter["sources"])
+
+
+def test_cli_lists_each_file_written(vault_path):
+    fixed(vault_path)
+    env = {"ETAL_SCHOLAR_FIXTURE": str(FIX), "ETAL_TODAY": "2026-10-31"}
+    r = CliRunner().invoke(main, ["--vault", str(vault_path), "sync", "scholar", "--dry-run"], env=env)
+    assert r.exit_code == 0, r.output
+    lines = r.output.splitlines()
+    wrote = [line for line in lines if line.startswith("Would write ")]
+    assert wrote == [
+        "Would write Outputs/Publications/2013 Exon-level expression.md",
+        "Would write Outputs/Publications/2016 SAT1.md",
+        "Would write Outputs/Publications/2024 DGIdb 5.0.md",
+        "Would write Outputs/Publications/2025 MAVE mapping.md",
+        "Would write Outputs/Publications/2026 Cat-VRS preprint.md",
+        "Would write Outputs/Publications/2026 Druggable genome LLM.md",
+        "Would write Outputs/citation-history.csv",
+    ]
+    counts = lines.index("6 updated, 0 refreshed")
+    assert lines.index(wrote[-1]) == counts - 1
+    assert not any(line.startswith("Wrote ") for line in lines)
+    r = CliRunner().invoke(main, ["--vault", str(vault_path), "sync", "scholar"], env=env)
+    assert "Wrote Outputs/Publications/2016 SAT1.md" in r.output.splitlines()
+    assert "Wrote Outputs/citation-history.csv" in r.output.splitlines()
+    r = CliRunner().invoke(main, ["--vault", str(vault_path), "sync", "scholar", "--force"], env=env)
+    lines = r.output.splitlines()
+    assert "0 updated, 6 refreshed" in lines
+    assert sum(line.startswith("Wrote ") for line in lines) == 7

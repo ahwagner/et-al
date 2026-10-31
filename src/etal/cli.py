@@ -158,6 +158,9 @@ def sync():
 @click.pass_context
 def scholar_cmd(ctx, only, force, dry_run):
     """Update citation counts and Scholar ids from your Google Scholar profile."""
+    fixture = os.environ.get("ETAL_SCHOLAR_FIXTURE")
+    if fixture:
+        click.echo(f"Reading Scholar works from fixture {fixture}")
     config, data = run_validation(_vault_from(ctx))
     names = {pub.note.name for pub in data.publications}
     if only is not None and only not in names:
@@ -166,7 +169,6 @@ def scholar_cmd(ctx, only, force, dry_run):
     if not force and scholar_sync.last_sync_date(config.history_path) == as_of:
         click.echo("already synced today; use --force")
         sys.exit(2)
-    fixture = os.environ.get("ETAL_SCHOLAR_FIXTURE")
     try:
         works = scholar_sync.works_from_json(Path(fixture)) if fixture else scholar_sync.fetch(config.scholar_profile)
     except scholar_sync.FetchError as exc:
@@ -175,7 +177,8 @@ def scholar_cmd(ctx, only, force, dry_run):
     result = scholar_sync.match(works, data.publications)
     if only is not None:
         result = scholar_sync.only(result, only)
-    changes = scholar_sync.apply(data, result, as_of, dry_run)
+    source = scholar_sync.fixture_source(Path(fixture)) if fixture else scholar_sync.SCHOLAR_SOURCE
+    changes = scholar_sync.apply(data, result, as_of, dry_run, source=source)
 
     if changes:
         table = Table()
@@ -195,8 +198,12 @@ def scholar_cmd(ctx, only, force, dry_run):
         buffer = io.StringIO()
         Console(file=buffer, width=240, color_system=None, force_terminal=False).print(table)
         click.echo(buffer.getvalue(), nl=False)
-    unchanged = len(result.matched) - len(changes)
-    click.echo(f"{len(changes)} updated, {unchanged} unchanged")
+    verb = "Would write" if dry_run else "Wrote"
+    for path in scholar_sync.files_written(data, result):
+        shown = path.relative_to(config.root).as_posix() if path.is_relative_to(config.root) else str(path)
+        click.echo(f"{verb} {shown}")
+    refreshed = len(result.matched) - len(changes)
+    click.echo(f"{len(changes)} updated, {refreshed} refreshed")
     click.echo("Scholar works with no note:")
     for work in result.unmatched_works:
         click.echo(f"  {work.title} ({work.year or 'n.d.'}, {work.citations} citations)")

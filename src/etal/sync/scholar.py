@@ -17,6 +17,12 @@ from etal.schema import Publication, VaultData
 from etal.vault import append_csv_rows, read_csv_rows, write_frontmatter
 
 HISTORY_HEADER = ["as_of", "note", "scholar_id", "citations"]
+SCHOLAR_SOURCE = "Google Scholar"
+
+
+def fixture_source(path: Path) -> str:
+    """The `sources` label for a run that read works from a fixture file instead of Scholar."""
+    return f"Scholar fixture {Path(path).name}"
 
 
 class FetchError(Exception):
@@ -89,7 +95,8 @@ def works_from_json(path: Path) -> list[ScholarWork]:
 def match(works: list[ScholarWork], publications: list[Publication]) -> MatchResult:
     """Pair works with notes by scholar_id, then by normalized title. Each side matches at most once.
 
-    A title shared by several unclaimed notes is ambiguous and is left unmatched rather than guessed.
+    A title shared by several unclaimed notes, or by several unclaimed works, is ambiguous and is left
+    unmatched on both sides rather than guessed: a stored scholar_id would lock a wrong guess in.
     """
     pairs: dict[int, tuple[Publication, ScholarWork]] = {}
     free_works = list(works)
@@ -112,10 +119,15 @@ def match(works: list[ScholarWork], publications: list[Publication]) -> MatchRes
     for pub in publications:
         if id(pub) not in claimed and pub.title:
             by_title.setdefault(normalize_title(pub.title), []).append(pub)
+    works_per_title: dict[str, int] = {}
+    for work in rest:
+        key = normalize_title(work.title)
+        works_per_title[key] = works_per_title.get(key, 0) + 1
     unmatched_works: list[ScholarWork] = []
     for work in rest:
-        candidates = [p for p in by_title.get(normalize_title(work.title), []) if id(p) not in claimed]
-        if len(candidates) == 1:
+        key = normalize_title(work.title)
+        candidates = [p for p in by_title.get(key, []) if id(p) not in claimed]
+        if len(candidates) == 1 and works_per_title[key] == 1:
             claimed.add(id(candidates[0]))
             pairs[id(candidates[0])] = (candidates[0], work)
         else:
@@ -143,19 +155,43 @@ def plan(result: MatchResult, as_of: dt.date) -> list[Change]:
     return changes
 
 
-def apply(data: VaultData, result: MatchResult, as_of: dt.date, dry_run: bool) -> list[Change]:
+def files_written(data: VaultData, result: MatchResult) -> list[Path]:
+    """Every file apply() writes for this result, in the order it writes them.
+
+    Every matched note is rewritten, changed count or not, because citations_as_of moves.
+    """
+    paths = [pub.note.path for pub, _ in result.matched]
+    if paths:
+        paths.append(data.config.history_path)
+    return paths
+
+
+def apply(
+    data: VaultData,
+    result: MatchResult,
+    as_of: dt.date,
+    dry_run: bool,
+    source: str = SCHOLAR_SOURCE,
+) -> list[Change]:
+    """Write the result into the notes and the history. `source` labels the `sources` entry."""
     changes = plan(result, as_of)
     if dry_run:
         return changes
-    entry = f"Google Scholar, {as_of.isoformat()}"
+    entry = f"{source}, {as_of.isoformat()}"
     rows = []
     for pub, work in result.matched:
         updates: dict[str, object] = {"citations": work.citations, "citations_as_of": as_of}
         if not pub.scholar_id:
             updates["scholar_id"] = work.scholar_id
-        sources = [str(s) for s in (pub.note.frontmatter.get("sources") or [])]
-        if not (sources and sources[-1].startswith("Google Scholar")):
-            updates["sources"] = sources + [entry]
+        sources = pub.note.frontmatter.get("sources")
+        if isinstance(sources, list) and len(sources) > 0:
+            # Append in place: the frontmatter holds this same object (a ruamel CommentedSeq, which is
+            # a list), so its comments, quoting, value types, and flow or block style survive the write.
+            if not str(sources[-1]).startswith(source):
+                sources.append(entry)
+        else:
+            # Absent, blank, or []: validation guarantees a non-empty value is a list.
+            updates["sources"] = [entry]
         write_frontmatter(pub.note, updates)
         rows.append([as_of.isoformat(), pub.note.name, pub.scholar_id or work.scholar_id, str(work.citations)])
     if rows:

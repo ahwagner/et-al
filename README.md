@@ -33,11 +33,17 @@ The tool never runs git. Commits are made by the person or agent running it.
 Two environment variables make runs repeatable.
 
 - `ETAL_TODAY`: an ISO date, such as `2026-10-31`. It fixes "today" for reports and for the once-a-day sync guard.
-- `ETAL_SCHOLAR_FIXTURE`: a path to a JSON list of `{scholar_id, title, year, citations}`. It replaces the network fetch in `etal sync scholar`.
+- `ETAL_SCHOLAR_FIXTURE`: a path to a JSON list of `{scholar_id, title, year, citations}`. It replaces the network fetch in `etal sync scholar`. The command then prints `Reading Scholar works from fixture PATH` first, and the `sources` line it writes is `Scholar fixture FILE, DATE` rather than `Google Scholar, DATE`.
+
+A fixture run writes the fixture's counts and Scholar ids into the notes, so never point it at the real vault. The example below copies the test fixture vault to a scratch folder and names that copy with `--vault`, which overrides any `ETAL_VAULT` you have exported:
 
 ```bash
-ETAL_SCHOLAR_FIXTURE=tests/fixtures/scholar/profile.json ETAL_TODAY=2026-10-31 etal sync scholar
+cp -R tests/fixtures/vault /tmp/etal-replay
+rm "/tmp/etal-replay/Conferences/Unframed Meeting.md" "/tmp/etal-replay/Outputs/Publications/2026 Unresolved import.md"
+ETAL_SCHOLAR_FIXTURE=tests/fixtures/scholar/profile.json ETAL_TODAY=2026-10-31 etal --vault /tmp/etal-replay sync scholar
 ```
+
+The two removed notes are planted validation failures in the fixture; with them present, every command stops at validation.
 
 ## Documents
 
