@@ -75,3 +75,43 @@ def test_csv_append_is_cumulative(tmp_path):
     rows = read_csv_rows(p)
     assert [r["citations"] for r in rows] == ["458", "460"]
     assert p.read_text().splitlines()[0] == "as_of,note,scholar_id,citations"
+
+
+def test_write_frontmatter_keeps_file_mode(tmp_path):
+    import os, stat
+    p = tmp_path / "n.md"; p.write_text(SAMPLE)
+    os.chmod(p, 0o644)
+    write_frontmatter(read_note(p), {"citations": 458})
+    assert stat.S_IMODE(os.stat(p).st_mode) == 0o644
+    os.chmod(p, 0o640)
+    write_frontmatter(read_note(p), {"citations": 459})
+    assert stat.S_IMODE(os.stat(p).st_mode) == 0o640
+
+
+def test_new_file_gets_the_umask_mode(tmp_path):
+    import os, stat
+    from etal.vault import write_text
+    old = os.umask(0o022)
+    try:
+        write_text(tmp_path / "new.md", "x\n")
+    finally:
+        os.umask(old)
+    assert stat.S_IMODE(os.stat(tmp_path / "new.md").st_mode) == 0o644
+
+
+def test_failed_write_leaves_the_note_whole(tmp_path):
+    import pytest
+    from etal.vault import write_text
+    p = tmp_path / "n.md"; p.write_text(SAMPLE)
+    with pytest.raises(UnicodeEncodeError):
+        write_text(p, "---\ntitle: \ud800\n---\n")      # a lone surrogate cannot be encoded
+    assert p.read_text() == SAMPLE
+    assert [x.name for x in tmp_path.iterdir()] == ["n.md"]
+
+
+def test_write_through_a_symlink_keeps_the_link(tmp_path):
+    from etal.vault import write_text
+    real = tmp_path / "real.md"; real.write_text("old\n")
+    link = tmp_path / "link.md"; link.symlink_to(real)
+    write_text(link, "new\n")
+    assert link.is_symlink() and real.read_text() == "new\n"

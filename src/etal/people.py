@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 
 from etal.schema import Person, Publication
@@ -10,8 +11,9 @@ __all__ = ["normalize_name", "AliasIndex", "AuthorFlags", "author_flags", "is_au
 
 
 def normalize_name(s: str) -> str:
-    """Strip, casefold, collapse whitespace to one space, drop trailing periods."""
-    return re.sub(r"\s+", " ", s.strip().casefold()).rstrip(".")
+    """NFC-compose, strip, casefold, collapse whitespace to one space, drop trailing periods, strip again."""
+    composed = unicodedata.normalize("NFC", s)
+    return re.sub(r"\s+", " ", composed.strip().casefold()).rstrip(".").strip()
 
 
 class AliasIndex:

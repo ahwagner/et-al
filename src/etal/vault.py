@@ -89,8 +89,33 @@ def write_frontmatter(note: Note, updates: dict[str, object]) -> None:
 
 
 def write_text(path: Path, text: str) -> None:
-    with open(path, "w", encoding="utf-8", newline="\n") as handle:
-        handle.write(text)
+    """Write a whole file atomically: a failed write leaves the old file, or none, never a partial one."""
+    _replace_atomically(Path(path), text)
+
+
+def _replace_atomically(path: Path, text: str) -> None:
+    """Write text to a temp file beside the target, then os.replace it into place.
+
+    A symlinked target is written through (the link stays a link). An existing file keeps its mode;
+    a new file gets the mode a plain open() would give it under the current umask.
+    """
+    target = Path(os.path.realpath(path))
+    try:
+        mode = os.stat(target).st_mode & 0o7777
+    except FileNotFoundError:
+        umask = os.umask(0)
+        os.umask(umask)
+        mode = 0o666 & ~umask
+    fd, tmp_name = tempfile.mkstemp(dir=target.parent, prefix=f".{target.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+        os.chmod(tmp_name, mode)
+        os.replace(tmp_name, target)
+    except BaseException:
+        if os.path.exists(tmp_name):
+            os.unlink(tmp_name)
+        raise
 
 
 def exists(path: Path) -> bool:
@@ -116,12 +141,4 @@ def append_csv_rows(path: Path, header: list[str], rows: list[list[str]]) -> Non
     if not path.exists():
         writer.writerow(header)
     writer.writerows(rows)
-    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
-            handle.write(buffer.getvalue())
-        os.replace(tmp_name, path)
-    except BaseException:
-        if os.path.exists(tmp_name):
-            os.unlink(tmp_name)
-        raise
+    _replace_atomically(path, buffer.getvalue())

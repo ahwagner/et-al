@@ -81,3 +81,16 @@ def test_co_first_counts_as_first(data):
     pub = data.by_name["publications"]["2016 SAT1"]
     pub.authors = ["Smith J", "Wagner AH", "Jones B"]; pub.co_first = ["Smith J", "Wagner A"]
     assert author_flags(pub, alex, idx).first
+
+
+def test_normalize_name_trailing_period_after_space_and_unicode_forms(data):
+    import unicodedata
+    assert normalize_name("Wagner AH .") == "wagner ah"
+    idx = AliasIndex.build(data.people)
+    assert idx.resolve("Wagner AH .").name == "Alex Wagner"
+    nfc = "Muñoz J"
+    nfd = unicodedata.normalize("NFD", nfc)
+    assert nfc != nfd and normalize_name(nfc) == normalize_name(nfd)
+    kori = data.by_name["people"]["Kori Kuzma"]
+    kori.aliases = [*kori.aliases, nfd]
+    assert AliasIndex.build(data.people).resolve(nfc) is kori
