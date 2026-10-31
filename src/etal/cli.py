@@ -1,9 +1,10 @@
+import os
 import sys
 from pathlib import Path
 
 import click
 
-from etal import __version__, schema
+from etal import __version__, init_vault, schema
 from etal.config import Config, ConfigError, find_vault, load_config
 
 
@@ -50,3 +51,18 @@ def validate(ctx):
         data.publications, data.presentations, data.honors,
     ))
     click.echo(f"OK: {count} notes")
+
+
+@main.command()
+@click.option("--dry-run", is_flag=True, help="List what would be created without writing.")
+@click.pass_context
+def init(ctx, dry_run):
+    """Create the config, folders, Bases views, and your People note where missing."""
+    root = Path(ctx.obj["vault"] or os.environ.get("ETAL_VAULT") or ".").expanduser().resolve()
+    created = init_vault.run(root, dry_run)
+    if not created:
+        click.echo("Nothing to do")
+        return
+    verb = "Would create" if dry_run else "Created"
+    for path in created:
+        click.echo(f"{verb} {path.relative_to(root).as_posix()}")
