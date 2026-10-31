@@ -1,0 +1,18 @@
+self: "[[Alex Wagner]]"
+scholar_profile: cwG4QRAAAAAJ
+career_stages:           # reports group publications by the stage containing date, unless the note sets stage
+  - name: Predoctoral
+    until: 2014-12-31    # PhD, University of Iowa, completed 12/2014
+  - name: Postdoctoral
+    until: 2020-08-02    # postdoctoral fellow 01/2015 to 07/2019, then Instructor of Medicine, Washington University, to 08/2020
+  - name: Nationwide Children's Hospital   # Principal Investigator from 2020-08-03; Associate Professor from 2026-06-04
+merge_superseded: false
+folders:                 # defaults shown; override only if the vault moves them
+  publications: Outputs/Publications
+  presentations: Outputs/Presentations
+  journals: Journals
+  conferences: Conferences
+  honors: Honors
+  awards: Awards
+  people: People
+  history: Outputs/citation-history.csv
