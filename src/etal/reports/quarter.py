@@ -126,6 +126,8 @@ def _title(record: Publication | Presentation) -> str:
 
 
 def build(data: VaultData, q: Quarter, lookback: int = 1) -> QuarterNote:
+    if _self_person(data, AliasIndex.build(data.people)) is None:
+        raise ValueError(f"no People note for {data.config.self_name!r}; the quarter note cannot tell your work from the lab's")
     published, accepted, lab, own_talks, lab_talks = _place(data, q.start, q.end)
     note = QuarterNote(
         self_publications=published,
@@ -213,7 +215,7 @@ def _funding_line(a: Award) -> str:
 def _conference_line(conf: Conference, talks: list[Presentation]) -> str:
     where = ", ".join(x for x in (conf.name, conf.location, f"{conf.start} to {conf.effective_end}") if x)
     labels: list[str] = []
-    for talk in talks:
+    for talk in _sorted(talks):
         label = format_label(talk.format or "other")
         if label not in labels:
             labels.append(label)

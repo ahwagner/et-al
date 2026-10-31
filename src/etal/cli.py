@@ -123,9 +123,10 @@ def quarter_cmd(ctx, quarter_label, lookback, to_stdout, dry_run):
     config, data = run_validation(_vault_from(ctx))
     try:
         q = quarter_report.Quarter.parse(quarter_label)
+        note = quarter_report.build(data, q, lookback)
     except ValueError as exc:
         raise click.ClickException(str(exc))
-    text = quarter_report.render(quarter_report.build(data, q, lookback), q, today())
+    text = quarter_report.render(note, q, today())
     target = config.folder("publications").parent / f"{q.label} outputs.md"
     shown = target.relative_to(config.root).as_posix()
     if not to_stdout:

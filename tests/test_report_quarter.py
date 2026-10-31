@@ -50,6 +50,8 @@ def test_writes_note_once(vault_path):
     target = vault_path / "Outputs" / "2026-Q3 outputs.md"
     r = CliRunner().invoke(main, ["--vault", str(vault_path), "report", "quarter", "2026-Q3"], env={"ETAL_TODAY": "2026-10-07"})
     assert r.exit_code == 0 and target.exists()
+    assert r.output == "Wrote Outputs/2026-Q3 outputs.md\n"
+    assert target.read_text() == GOLDEN.read_text()
     r = CliRunner().invoke(main, ["--vault", str(vault_path), "report", "quarter", "2026-Q3"], env={"ETAL_TODAY": "2026-10-07"})
     assert "already exists" in r.output and "## Publications" in r.output
 
@@ -91,3 +93,87 @@ def test_lookback_two_months_heading(data):
     assert "## Checked back to May and June" in text
     assert "checked back to May and June." in text
     assert "Checked back" not in render(build(data, q, lookback=0), q, dt.date(2026, 10, 7))
+
+def _render(data, label, lookback=1):
+    q = Quarter.parse(label)
+    return render(build(data, q, lookback), q, dt.date(2026, 10, 7))
+
+def test_funding_line(data):
+    text = _render(data, "2026-Q2")
+    assert "## Funding\n\n- 2026-05-01 | R03. R03HG014803. NHGRI. Contact PI.\n" in text
+
+def test_checked_back_section_renders_full_line(vault_path):
+    (vault_path / "Outputs" / "2026-Q2 outputs.md").unlink()
+    from etal import schema; from etal.config import load_config
+    data = schema.load(load_config(vault_path))
+    talk = next(p for p in data.presentations if p.note.name == "2026-06-20 Prior quarter talk")
+    from etal.render import presentation_line
+    text = _render(data, "2026-Q3")
+    assert f"## Checked back to June\n\n- 2026-06-20 | {presentation_line(talk)}\n\n## Presentations" in text
+
+def test_lab_publication_without_alex(vault_path):
+    note = vault_path / "Outputs" / "Publications" / "2026 Lab only paper.md"
+    note.write_text("""---
+type: publication
+title: A lab only paper
+format: article
+status: published
+date: 2026-08-10
+journal: "[[Genome Biology]]"
+volume:
+issue:
+pages:
+authors:
+  - Kuzma K
+  - Cannon M
+co_first: []
+corresponding: []
+senior: []
+peer_reviewed:
+doi:
+pmid:
+pmcid:
+url:
+scholar_id:
+citations:
+citations_as_of:
+grants: []
+supersedes:
+stage:
+sources: []
+notes:
+---
+# Lab only paper
+""")
+    from etal import schema; from etal.config import load_config
+    from etal.render import nlm_citation
+    data = schema.load(load_config(vault_path))
+    n = build(data, Quarter.parse("2026-Q3"))
+    assert [p.note.name for p in n.lab_publications] == ["2026 Lab only paper"]
+    assert [p.note.name for p in n.self_publications] == ["2026 Druggable genome LLM"]
+    text = _render(data, "2026-Q3")
+    assert f"Lab, without Alex as an author:\n\n- 2026-08-10 | {nlm_citation(n.lab_publications[0])}\n" in text
+
+def test_conference_line_order(data):
+    text = _render(data, "2026-Q3")
+    assert "- CGC Annual Meeting 2026, Houston, TX, 2026-08-01 to 2026-08-05. Invited talk, poster.\n" in text
+
+def test_missing_self_person_stops(data):
+    import pytest
+    data.people = [p for p in data.people if p.name != "Alex Wagner"]
+    del data.people_by_name["Alex Wagner"]
+    with pytest.raises(ValueError, match="Alex Wagner"):
+        build(data, Quarter.parse("2026-Q3"))
+
+def test_cli_turns_missing_self_into_error(vault_path, monkeypatch):
+    from etal import schema
+    real = schema.load
+    def load_without_self(config):
+        d = real(config)
+        d.people = [p for p in d.people if p.name != "Alex Wagner"]
+        del d.people_by_name["Alex Wagner"]
+        return d
+    monkeypatch.setattr(schema, "load", load_without_self)
+    monkeypatch.setattr(schema, "validate", lambda d: [])
+    r = CliRunner().invoke(main, ["--vault", str(vault_path), "report", "quarter", "2026-Q3", "--stdout"])
+    assert r.exit_code == 1 and "Alex Wagner" in r.output and "no People note" in r.output
