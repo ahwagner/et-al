@@ -46,12 +46,17 @@ def csv_text(headers: list[str], rows: list[list[str]]) -> str:
     return buffer.getvalue()
 
 
+def _sentence(text: str) -> str:
+    """End text with a period unless it already ends in sentence punctuation."""
+    return text if text.endswith((".", "?", "!")) else f"{text}."
+
+
 def nlm_citation(pub: Publication) -> str:
     parts: list[str] = []
     if pub.authors:
         parts.append(", ".join(pub.authors) + ".")
     if pub.title:
-        parts.append(f"{pub.title}.")
+        parts.append(_sentence(pub.title))
     if pub.journal is not None and pub.journal.abbreviation:
         parts.append(f"{pub.journal.abbreviation}.")
     if pub.date is not None:
@@ -77,7 +82,7 @@ def presentation_line(p: Presentation) -> str:
     if names:
         parts.append(", ".join(names) + ".")
     if p.title:
-        parts.append(f"{p.title}.")
+        parts.append(_sentence(p.title))
     where = ", ".join(x for x in (p.event.name if p.event is not None else None, p.location) if x)
     if where:
         parts.append(f"{where}.")

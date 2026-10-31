@@ -63,6 +63,21 @@ def _totals(rows: list[Row]) -> Totals:
     )
 
 
+def _predecessors(pub: Publication) -> list[Publication]:
+    """The notes pub supersedes, nearest first, to the end of the chain.
+
+    A chain that loops back to pub has no head, so it folds nothing; validate reports the loop.
+    """
+    chain: list[Publication] = []
+    seen = {id(pub)}
+    prev = pub.supersedes
+    while prev is not None and id(prev) not in seen:
+        chain.append(prev)
+        seen.add(id(prev))
+        prev = prev.supersedes
+    return [] if prev is pub else chain
+
+
 def build(
     data: VaultData,
     person_name: str | None = None,
@@ -84,23 +99,25 @@ def build(
         p for p in data.publications
         if p.format in formats and p.status in statuses and is_author(p, person, index)
     ]
-    chosen = {id(p) for p in selected}
 
-    # Fold each superseded preprint into the publication that replaces it, when that one is also in the report.
+    # Fold every note a selected note supersedes, down the whole chain, into it. A predecessor folds in
+    # whatever its own status, format, or authors; it is the same work. A selected note that another
+    # selected note supersedes is counted only inside that one.
     extra: dict[int, int] = {}
     as_ofs: list[dt.date] = []
     if config.merge_superseded:
-        replaced_by = {id(p.supersedes): p for p in data.publications if p.supersedes is not None}
-        kept: list[Publication] = []
+        chains = {id(pub): _predecessors(pub) for pub in selected}
+        absorbed = {id(prev) for chain in chains.values() for prev in chain}
+        selected = [pub for pub in selected if id(pub) not in absorbed]
+        folded: set[int] = set()   # a note two others both claim to supersede still counts once
         for pub in selected:
-            target = replaced_by.get(id(pub))
-            if target is None or id(target) not in chosen:
-                kept.append(pub)
-                continue
-            extra[id(target)] = extra.get(id(target), 0) + (pub.citations or 0)
-            if pub.citations_as_of is not None:
-                as_ofs.append(pub.citations_as_of)
-        selected = kept
+            for prev in chains[id(pub)]:
+                if id(prev) in folded:
+                    continue
+                folded.add(id(prev))
+                extra[id(pub)] = extra.get(id(pub), 0) + (prev.citations or 0)
+                if prev.citations_as_of is not None:
+                    as_ofs.append(prev.citations_as_of)
 
     placed: dict[str, list[tuple[tuple, Row]]] = {stage: [] for stage in config.stage_names}
     fcpr_citations = 0

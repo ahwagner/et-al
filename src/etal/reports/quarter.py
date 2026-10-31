@@ -90,19 +90,30 @@ def _lab_authored(pub: Publication, index: AliasIndex) -> bool:
     return False
 
 
+# Which statuses each publication list takes. Alex's work in any other status goes under Open.
+PUBLISHED_STATUSES = ("published", "preprint")
+ACCEPTED_STATUSES = ("accepted",)
+LAB_STATUSES = ("published", "accepted", "preprint")
+
+
 def _place(data: VaultData, start: dt.date, end: dt.date):
-    """Publications and presentations in [start, end], placed as the note places them."""
+    """Publications and presentations in [start, end], placed as the note places them.
+
+    Returns the five listed groups, then Alex's publications in the window that no list takes.
+    """
     index = AliasIndex.build(data.people)
     me = _self_person(data, index)
     pubs = [p for p in data.publications if p.date is not None and in_window(p.date, start, end)]
     mine = [p for p in pubs if me is not None and is_author(p, me, index)]
-    published = [p for p in mine if p.status == "published"]
-    accepted = [p for p in mine if p.status == "accepted"]
-    lab = [p for p in pubs if p not in mine and _lab_authored(p, index)]
+    published = [p for p in mine if p.status in PUBLISHED_STATUSES]
+    accepted = [p for p in mine if p.status in ACCEPTED_STATUSES]
+    unlisted = [p for p in mine if p.status not in (*PUBLISHED_STATUSES, *ACCEPTED_STATUSES)]
+    lab = [p for p in pubs if p not in mine and p.status in LAB_STATUSES and _lab_authored(p, index)]
     talks = [p for p in data.presentations if p.date is not None and in_window(p.date, start, end)]
     own_talks = [p for p in talks if _is_self_presenter(p, me)]
     lab_talks = [p for p in talks if not _is_self_presenter(p, me)]
-    return (_sorted(published), _sorted(accepted), _sorted(lab), _sorted(own_talks), _sorted(lab_talks))
+    listed = (_sorted(published), _sorted(accepted), _sorted(lab), _sorted(own_talks), _sorted(lab_talks))
+    return listed, _sorted(unlisted)
 
 
 def previous_note_text(data: VaultData, q: Quarter) -> str | None:
@@ -128,7 +139,7 @@ def _title(record: Publication | Presentation) -> str:
 def build(data: VaultData, q: Quarter, lookback: int = 1) -> QuarterNote:
     if _self_person(data, AliasIndex.build(data.people)) is None:
         raise ValueError(f"no People note for {data.config.self_name!r}; the quarter note cannot tell your work from the lab's")
-    published, accepted, lab, own_talks, lab_talks = _place(data, q.start, q.end)
+    (published, accepted, lab, own_talks, lab_talks), unlisted = _place(data, q.start, q.end)
     note = QuarterNote(
         self_publications=published,
         accepted=accepted,
@@ -148,6 +159,8 @@ def build(data: VaultData, q: Quarter, lookback: int = 1) -> QuarterNote:
     for pub in [*published, *accepted, *lab]:
         if not pub.date.day_recorded:
             note.open_items.append(f"{pub.note.name}: day not recorded")
+    for pub in unlisted:
+        note.open_items.append(f"{pub.note.name}: status {pub.status}, not listed")
     for talk in [*own_talks, *lab_talks]:
         if not talk.date.day_recorded:
             note.open_items.append(f"{talk.note.name}: day not recorded")
@@ -164,7 +177,7 @@ def build(data: VaultData, q: Quarter, lookback: int = 1) -> QuarterNote:
         first = _shift_months(q.start, lookback)
         note.lookback_months = [_shift_months(q.start, n) for n in range(lookback, 0, -1)]
         previous = previous_note_text(data, q)
-        found = _place(data, first, q.start - dt.timedelta(days=1))
+        found, _ = _place(data, first, q.start - dt.timedelta(days=1))
         items = sorted(
             [item for group in found for item in group],
             key=lambda r: (r.date, r.note.name),

@@ -53,3 +53,47 @@ def test_markdown_has_sheet_columns(vault_path):
     assert "| Title | Date | Journal | Citations | First / co-first | Senior / Corresponding | Peer Reviewed | First or Corresponding and Peer Reviewed |" in r.output
     assert "Grand Total" in r.output and "First or Corresponding Peer Reviewed Total" in r.output
     assert "Counts as of 2026-10-30" in r.output
+
+
+def test_merge_superseded_under_default_filters(data):
+    data.config = dataclasses.replace(data.config, merge_superseded=True)
+    r = citations.build(data)
+    assert r.grand.count == 6
+    catvrs = next(row for s in r.stages for row in s.rows if row.title.startswith("The GA4GH Categorical"))
+    assert catvrs.citations == 5          # 2 on the accepted paper + 3 on the preprint it supersedes
+
+
+def _write_earlier_preprint(vault_path):
+    pubs = vault_path / "Outputs" / "Publications"
+    text = (pubs / "2026 Cat-VRS preprint.md").read_text()
+    text = text.replace("scholar_id: cwG4QRAAAAAJ:catvrs1", "scholar_id:").replace("citations: 3", "citations: 7")
+    text = text.replace("date: 2026-04-30", "date: 2026-01-15").replace("# Cat-VRS preprint", "# Cat-VRS preprint v1")
+    (pubs / "2026 Cat-VRS preprint v1.md").write_text(text)
+    preprint = pubs / "2026 Cat-VRS preprint.md"
+    preprint.write_text(preprint.read_text().replace("supersedes:\n", 'supersedes: "[[2026 Cat-VRS preprint v1]]"\n', 1))
+
+
+def test_merge_superseded_follows_a_chain(vault_path):
+    _write_earlier_preprint(vault_path)
+    from etal import schema
+    from etal.config import load_config
+    data = schema.load(load_config(vault_path))
+    data.config = dataclasses.replace(data.config, merge_superseded=True)
+    for statuses in (None, {"published", "accepted", "preprint"}):
+        r = citations.build(data, statuses=statuses)
+        assert r.grand.count == 6
+        catvrs = next(row for s in r.stages for row in s.rows if row.title.startswith("The GA4GH Categorical"))
+        assert catvrs.citations == 12     # 2 + 3 + 7: both predecessors fold in
+
+
+def test_merge_superseded_survives_self_link_and_cycle(data):
+    data.config = dataclasses.replace(data.config, merge_superseded=True)
+    pubs = data.by_name["publications"]
+    sat1, mave = pubs["2016 SAT1"], pubs["2025 MAVE mapping"]
+    sat1.supersedes = sat1
+    r = citations.build(data)
+    assert r.grand.count == 6
+    sat1.supersedes, mave.supersedes = mave, sat1
+    r = citations.build(data)
+    titles = [row.title for s in r.stages for row in s.rows]
+    assert sat1.title in titles and mave.title in titles

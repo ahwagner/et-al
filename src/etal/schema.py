@@ -562,6 +562,23 @@ def _validate_publications(data: VaultData, out: list[Problem], ambiguous: Calla
             ambiguous(pub, key, getattr(pub, key))
     for key in ("doi", "pmid", "scholar_id"):
         _duplicates(out, [(pub, key, getattr(pub, key)) for pub in data.publications])
+    _validate_supersedes(data, out)
+
+
+def _validate_supersedes(data: VaultData, out: list[Problem]) -> None:
+    """A supersedes chain must end. Each note on a loop is reported, naming the loop from itself."""
+    for pub in data.publications:
+        if pub.supersedes is pub:
+            out.append(Problem(pub.note.path, "supersedes", "links to this note itself"))
+            continue
+        path = [pub]
+        prev = pub.supersedes
+        while prev is not None and all(prev is not seen for seen in path):
+            path.append(prev)
+            prev = prev.supersedes
+        if prev is pub:
+            names = " -> ".join(p.note.name for p in [*path, pub])
+            out.append(Problem(pub.note.path, "supersedes", f"forms a cycle: {names}"))
 
 
 def _validate_presentations(data: VaultData, out: list[Problem], ambiguous: Callable[[Any, str, list[str]], None]) -> None:

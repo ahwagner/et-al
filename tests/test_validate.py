@@ -219,3 +219,21 @@ def test_single_problem_is_singular(vault_path):
     (vault_path / "Conferences" / "Unframed Meeting.md").unlink()
     r = CliRunner().invoke(main, ["--vault", str(vault_path), "validate"])
     assert r.exit_code == 1 and r.output.rstrip().endswith("\n1 problem")
+
+
+def test_supersedes_itself(vault_path):
+    edit(vault_path, PUBS, "2016 SAT1.md", "supersedes:\n", 'supersedes: "[[2016 SAT1]]"\n')
+    assert "itself" in one(problems(vault_path), "2016 SAT1.md", "supersedes")
+
+
+def test_supersedes_cycle(vault_path):
+    edit(vault_path, PUBS, "2016 SAT1.md", "supersedes:\n", 'supersedes: "[[2025 MAVE mapping]]"\n')
+    edit(vault_path, PUBS, "2025 MAVE mapping.md", "supersedes:\n", 'supersedes: "[[2016 SAT1]]"\n')
+    probs = problems(vault_path)
+    assert one(probs, "2016 SAT1.md", "supersedes") == "forms a cycle: 2016 SAT1 -> 2025 MAVE mapping -> 2016 SAT1"
+    assert one(probs, "2025 MAVE mapping.md", "supersedes") == "forms a cycle: 2025 MAVE mapping -> 2016 SAT1 -> 2025 MAVE mapping"
+
+
+def test_supersedes_chain_is_fine(vault_path):
+    edit(vault_path, PUBS, "2026 Cat-VRS preprint.md", "supersedes:\n", 'supersedes: "[[2016 SAT1]]"\n')
+    assert ("2026 Cat-VRS preprint.md", "supersedes") not in problems(vault_path)

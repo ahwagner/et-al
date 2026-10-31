@@ -177,3 +177,69 @@ def test_cli_turns_missing_self_into_error(vault_path, monkeypatch):
     monkeypatch.setattr(schema, "validate", lambda d: [])
     r = CliRunner().invoke(main, ["--vault", str(vault_path), "report", "quarter", "2026-Q3", "--stdout"])
     assert r.exit_code == 1 and "Alex Wagner" in r.output and "no People note" in r.output
+
+
+def _write_pub(vault_path, name, title, status, fmt, date, journal="Bioinformatics"):
+    (vault_path / "Outputs" / "Publications" / f"{name}.md").write_text(f"""---
+type: publication
+title: {title}
+format: {fmt}
+status: {status}
+date: {date}
+journal: "[[{journal}]]"
+authors:
+  - Kuzma K
+  - Wagner AH
+citations:
+supersedes:
+sources: []
+---
+# {name}
+""")
+
+
+def test_own_preprint_in_window_is_listed(vault_path):
+    _write_pub(vault_path, "2026 Q3 preprint", "A preprint in the quarter", "preprint", "preprint", "2026-08-01", "bioRxiv")
+    from etal import schema; from etal.config import load_config
+    from etal.render import nlm_citation
+    data = schema.load(load_config(vault_path))
+    n = build(data, Quarter.parse("2026-Q3"))
+    assert [p.note.name for p in n.self_publications] == ["2026 Q3 preprint", "2026 Druggable genome LLM"]
+    text = _render(data, "2026-Q3")
+    pre = data.by_name["publications"]["2026 Q3 preprint"]
+    assert f"## Publications\n\n- 2026-08-01 | {nlm_citation(pre)}\n- 2026-08-22 | " in text
+
+
+def test_own_submitted_paper_goes_to_open_only(vault_path):
+    _write_pub(vault_path, "2026 Q3 submitted", "A submitted paper", "submitted", "article", "2026-08-15")
+    _write_pub(vault_path, "2026 Q3 draft", "A draft paper", "in preparation", "article", "2026-09-01")
+    from etal import schema; from etal.config import load_config
+    data = schema.load(load_config(vault_path))
+    n = build(data, Quarter.parse("2026-Q3"))
+    listed = [p.note.name for p in (*n.self_publications, *n.accepted, *n.lab_publications)]
+    assert "2026 Q3 submitted" not in listed and "2026 Q3 draft" not in listed
+    assert "2026 Q3 submitted: status submitted, not listed" in n.open_items
+    assert "2026 Q3 draft: status in preparation, not listed" in n.open_items
+    text = _render(data, "2026-Q3")
+    assert "A submitted paper" not in text and "A draft paper" not in text
+    assert "- 2026 Q3 submitted: status submitted, not listed\n" in text
+
+
+def test_lab_list_takes_only_listed_statuses(vault_path):
+    for status in ("published", "accepted", "preprint", "submitted"):
+        (vault_path / "Outputs" / "Publications" / f"2026 Lab {status}.md").write_text(f"""---
+type: publication
+title: Lab {status} paper
+format: article
+status: {status}
+date: 2026-08-10
+journal: "[[Genome Biology]]"
+authors:
+  - Kuzma K
+sources: []
+---
+# Lab {status}
+""")
+    from etal import schema; from etal.config import load_config
+    n = build(schema.load(load_config(vault_path)), Quarter.parse("2026-Q3"))
+    assert [p.note.name for p in n.lab_publications] == ["2026 Lab accepted", "2026 Lab preprint", "2026 Lab published"]

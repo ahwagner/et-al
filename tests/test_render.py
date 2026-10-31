@@ -34,3 +34,16 @@ def test_presentation_line_blank_title(data):
     p = data.by_name["presentations"]["2026-08-05 FUSOR poster"]
     p.title = None
     assert presentation_line(p).startswith("Poster, in person | Daniel Puthawala. CGC Annual Meeting 2026,")
+
+
+def test_title_ending_in_punctuation_gets_no_extra_period(data):
+    pub = data.by_name["publications"]["2026 Cat-VRS preprint"]
+    pub.title = "Is Cat-VRS ready?"
+    assert nlm_citation(pub) == "Puthawala D, Reardon B, Wagner AH. Is Cat-VRS ready? bioRxiv. 2026."
+    pub.title = "Cat-VRS works!"
+    assert "Cat-VRS works! bioRxiv." in nlm_citation(pub)
+    pub.title = "Cat-VRS, et al."
+    assert "Cat-VRS, et al. bioRxiv." in nlm_citation(pub)
+    p = data.by_name["presentations"]["2026-08-05 FUSOR poster"]
+    p.title = "Can FUSOR standardize fusions?"
+    assert "Daniel Puthawala. Can FUSOR standardize fusions? CGC Annual Meeting 2026," in presentation_line(p)
