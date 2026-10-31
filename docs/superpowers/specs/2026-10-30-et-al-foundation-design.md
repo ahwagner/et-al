@@ -178,6 +178,9 @@ grants:
   - "[[R35]]"
 supersedes:              # wikilink to the preprint note this published version replaces
 stage:                   # career stage override, by name from etal.yaml; set when the work predates its publication date
+sources:                 # where the record's values came from, one line per source, newest last
+  - PubMed record, 2026-10-31
+  - Paper Citations sheet, read 2026-10-31
 notes:                   # short free text that reports may print
 ---
 # DGIdb 5.0
@@ -187,6 +190,7 @@ Free text. Reviewer history, where the data lives, anything else.
 
 Rules:
 
+- `sources` is optional on every output note type (publication, presentation, honor). It is provenance for merges, written by Wheatley during imports and by `etal sync` when it changes a value. Reports ignore it.
 - `title`, `kind`, `status`, `date`, `authors`, `journal` are required. `journal` must resolve to a `Journals/` note. A white paper, dataset, or software release with no venue uses a journal note for its host (Zenodo, GitHub, the publishing body) so the rule has no exceptions.
 - `authors` entries are the printed form. Matching a printed name to a `People/` note goes through that note's `aliases`.
 - A preprint and its published version are two notes. The published note links the preprint through `supersedes`. The citation report counts the published note and folds the preprint's citations into it only when `etal.yaml` sets `merge_superseded: true` (default false, matching how Scholar usually lists them separately).
@@ -320,14 +324,20 @@ as_of,note,scholar_id,citations
 
 `note` is the note's basename without extension. The file is the source for any later time series or "citations gained this period" report.
 
-### Bases views
+### Bases views: the spreadsheet view over the notes
 
-`etal init` writes two standalone `.base` files so the records render as tables in Obsidian:
+Bases is Obsidian's built-in database feature, enabled in this vault. A base is a saved query over notes: a filter (which notes), a set of columns (which properties), and a sort, rendered as a table. It holds no data of its own. Every cell is read live from a note's frontmatter, and editing a cell in the table writes that property back into the note. Delete the base and nothing is lost; delete a note and its row disappears.
 
-- `Outputs/Publications.base`: columns title, date, journal, citations, peer_reviewed, grants; sorted by date descending.
-- `Outputs/Presentations.base`: columns date, kind, event, presenters, audience, grants; sorted by date descending.
+So a base does for the vault what the Paper Citations sheet does today, with one difference: the table and the records are the same thing. A base is defined either in a standalone `.base` file, which opens as its own tab, or in a `base` code block inside a note, which the award notes in this vault already use to list the outcomes that link to them.
 
-They are plain YAML in Obsidian's Bases format and can be edited in Obsidian. The tool never rewrites one that exists. A journal or conference note can carry its own embedded Bases block listing the publications or presentations that link to it, in the same pattern the award notes use today; Wheatley adds those from a template, not the tool.
+`etal init` writes two standalone files, as a convenience for looking at and hand-editing the records:
+
+- `Outputs/Publications.base`: every note in `Outputs/Publications`, columns title, date, journal, citations, peer_reviewed, grants, sorted by date descending.
+- `Outputs/Presentations.base`: every note in `Outputs/Presentations`, columns date, kind, event, presenters, audience, grants, sorted by date descending.
+
+They are plain YAML in Obsidian's Bases format, and Obsidian's own editor can change them (add a column, change a sort). The tool never rewrites one that exists, and nothing in the tool reads them. Reports are computed from the notes, not from a base.
+
+A journal or conference note can also carry an embedded base listing the publications or presentations that link to it, in the same pattern the award notes use. Wheatley adds those from a template; the tool does not.
 
 ## Command line
 
@@ -359,7 +369,7 @@ Matching, in order:
 2. Normalized title equality (lowercase, punctuation and whitespace collapsed, diacritics folded).
 3. Nothing else. Fuzzy matching is deliberately absent; near misses are reported for a human to resolve by adding `scholar_id`.
 
-For each match: set `citations` and `citations_as_of`, write `scholar_id` if missing, append a history row. Frontmatter is rewritten with the original key order and other properties untouched. The body is never modified.
+For each match: set `citations` and `citations_as_of`, write `scholar_id` if missing, append a history row, and append "Google Scholar, YYYY-MM-DD" to `sources` if the last entry is not already a Scholar line. Frontmatter is rewritten with the original key order and other properties untouched. The body is never modified.
 
 Output: a table of updated notes with old and new counts, then two lists: Scholar works with no note, and notes with no Scholar match. `--only NOTE` restricts the run.
 
@@ -432,10 +442,10 @@ Boundaries worth stating:
 
 ## Migration
 
-The migration from the two Google Sheets and the existing quarterly notes is Wheatley's work, done by hand in the vault under its own rules, following `docs/wheatley-migration.md`. That document carries the column mappings, the name and date rules, and the checks. In outline:
+Populating the vault is Wheatley's work, done by hand under the vault's own rules, following `docs/wheatley-migration.md`. Alex has tracked outputs in several places over the years (the two Google Sheets, quarterly notes, biosketches, CVs, and others), and they do not fully agree, so that document is a general import-and-merge procedure: how to inventory a source, map it to the schema, match its records to existing notes, merge without losing anything, record provenance in `sources`, and check the result. The two sheets, the quarterly notes, and the biosketch are worked examples in it. In outline:
 
-1. Alex gives Wheatley the two sheets as CSV, and Wheatley reads the existing `Outputs/YYYY-Qn outputs.md` notes.
-2. Wheatley creates the journal, conference, and missing people notes first, then publications, presentations, and honors, committing each batch under the vault's git rules.
+1. Wheatley creates the journal, conference, and missing people notes first, then publications, presentations, and honors, one source at a time in order of reliability, committing each batch under the vault's git rules.
+2. Each later source is matched against what exists and merged: blanks filled, conflicts recorded and queued for Alex, never silently overwritten.
 3. Once `etal` is installed: `etal init`, `etal validate`, fix what it lists, `etal sync scholar`, then `etal report citations` and compare totals and flags to the sheet. Flag differences point at `co_first`, `corresponding`, or `senior` lists to correct.
 4. From then on, new outputs are added as notes, and the quarterly note starts from `etal report quarter`.
 
