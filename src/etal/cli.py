@@ -6,6 +6,8 @@ import click
 
 from etal import __version__, init_vault, schema
 from etal.config import Config, ConfigError, find_vault, load_config
+from etal.reports import citations as citations_report
+from etal.vault import write_text
 
 
 def run_validation(vault: Path) -> tuple[Config, schema.VaultData]:
@@ -69,3 +71,34 @@ def init(ctx, dry_run):
     verb = "Would create" if dry_run else "Created"
     for path in created:
         click.echo(f"{verb} {path.relative_to(root).as_posix()}")
+
+
+@main.group()
+def report():
+    """Render a report from the notes."""
+
+
+def _csv_set(ctx, param, value):
+    return None if value is None else {item.strip() for item in value.split(",") if item.strip()}
+
+
+@report.command("citations")
+@click.option("--output", "output", type=click.Choice(["md", "csv"]), default="md", show_default=True)
+@click.option("--format", "formats", callback=_csv_set, default=None, help="Publication formats, comma separated.")
+@click.option("--status", "statuses", callback=_csv_set, default=None, help="Publication statuses, comma separated.")
+@click.option("--person", "person", default=None, help="People note name. Defaults to you.")
+@click.option("--as-of", "as_of", is_flag=True, help="Add the oldest citations_as_of date to the Markdown.")
+@click.option("--to", "to", type=click.Path(path_type=Path), default=None, help="Write to this path instead of printing.")
+@click.pass_context
+def citations_cmd(ctx, output, formats, statuses, person, as_of, to):
+    """Publications by career stage with citation counts and authorship flags."""
+    _, data = run_validation(_vault_from(ctx))
+    try:
+        result = citations_report.build(data, person, formats, statuses)
+    except ValueError as exc:
+        raise click.ClickException(str(exc))
+    text = citations_report.render_csv(result) if output == "csv" else citations_report.render_markdown(result, as_of)
+    if to is not None:
+        write_text(to, text)
+    else:
+        click.echo(text, nl=False)
