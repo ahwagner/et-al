@@ -1,7 +1,7 @@
 # et-al foundation design
 
-Date: 2026-10-30
-Status: approved design, awaiting implementation plan
+Date: 2026-10-30, revised 2026-10-31
+Status: approved design with revisions from Alex's review, awaiting implementation plan
 Scope: sub-project 1 of 4 (see "Roadmap" at the end)
 
 ## Purpose
@@ -17,14 +17,16 @@ Decisions already made with Alex:
 
 - Reports needed: promotion and CV metrics, NIH RPPR, public profile sync. Lab-wide productivity dashboards are not a goal, but the records must support lab members as presenters, recipients, and authors because RPPR and the kudos note need them.
 - Form factor: a command line tool over files in git. No server, no database.
-- Canonical source: Alex's Obsidian vault (private repo `ahwagner/wheatley-vault`). The tool reads and writes vault notes. His assistant, Wheatley, can reformat existing notes to match this spec.
+- Canonical source: Alex's Obsidian vault (private repo `ahwagner/wheatley-vault`). The tool reads and writes vault notes. His assistant, Wheatley, reformats existing notes and migrates the sheets to match this spec.
 - Canonical citation source: Google Scholar. Other sources are used for identifiers and metadata, not counts.
+- Journals and conferences are first-class notes that publications and presentations link to, not strings.
+- The tool has no one-time commands. The migration from the sheets is a written procedure for Wheatley: `docs/wheatley-migration.md`.
 
 ## Shape
 
 `et-al` is a Python package providing the `etal` command. It is installed on Alex's Mac and pointed at the vault. The vault is the only data store.
 
-- **Hand-maintained facts** live in note frontmatter and are edited by Alex, Wheatley, or `etal import`.
+- **Hand-maintained facts** live in note frontmatter and are edited by Alex or Wheatley.
 - **Machine-fetched facts** (citation counts, later resolved identifiers) are written into frontmatter by `etal sync`, plus one append-only history file for time series.
 - **Reports** are rendered to Markdown or CSV, to stdout or to a path. The quarterly note is written into the vault.
 - **Git is not the tool's job.** `etal` never runs git. Wheatley commits what the tool wrote under the vault's own rules (`System/procedures/git.md`). This keeps the vault's one-committer convention intact.
@@ -37,6 +39,7 @@ Decisions already made with Alex:
 - Every note has YAML frontmatter with a `type` property. Folders group by type; Bases filters use `file.inFolder(...)` and `type`.
 - Links between notes are wikilinks. In a property, each link is quoted: `- "[[Note name]]"`.
 - `Awards/` means funding awards (grants). This spec keeps that meaning. Prizes and recognitions go in a new `Honors/` folder.
+- `Conferences/` already holds one note per event Alex attends, with his notes from it. This spec makes those notes the event entity that presentations link to.
 - Dates are ISO: `YYYY-MM-DD`. Where only the month is known, `YYYY-MM` is allowed and reported as "day not recorded".
 - The tool never deletes or renames notes. Renames are Alex's or Wheatley's, through the Obsidian command line.
 
@@ -50,11 +53,83 @@ Outputs/
   Presentations.base    Bases table of presentations
   citation-history.csv  append-only, written by etal sync scholar
   YYYY-Qn outputs.md    quarterly note, drafted by etal report quarter
+Journals/               one note per journal or preprint server
+Conferences/            existing: one note per event, gains properties
 Honors/                 one note per prize, nomination, or recognition
 Awards/                 existing grant notes, gain a few properties
 People/                 existing person notes, gain a few properties
 etal.yaml               tool configuration, vault root
 ```
+
+### Entity relationships
+
+```
+Publication  --journal-->      Journal
+Publication  --grants-->       Award (many)
+Publication  --authors-->      printed names, resolved to People through aliases
+Publication  --supersedes-->   Publication (preprint)
+Presentation --event-->        Conference
+Presentation --presenters-->   People (many), or plain names
+Presentation --grants-->       Award (many)
+Honor        --recipient-->    Person
+Honor        --related-->      Publication or Presentation
+```
+
+Properties that a child can inherit from its parent are marked "defaults from" below. The child's own value, when present, wins.
+
+### Journal note
+
+Path: `Journals/<full name>.md`. Example: `Journals/Nucleic Acids Research.md`. Preprint servers are journal notes too, so a preprint has somewhere to point.
+
+```yaml
+---
+type: journal
+name: Nucleic Acids Research
+abbreviation: Nucleic Acids Res     # NLM Title Abbreviation, used in citation lines
+issn: 0305-1048
+eissn: 1362-4962
+publisher: Oxford University Press
+url: https://academic.oup.com/nar
+peer_reviewed: true                 # default for publications in this journal
+nlm_id:                             # NLM Catalog id, for sub-project 2
+---
+# Nucleic Acids Research
+```
+
+Rules:
+
+- `name` and `abbreviation` are required. `peer_reviewed` is required because publications default to it.
+- Citation lines use `abbreviation`. The citation report and the quarterly note print `abbreviation`; the Bases view shows the note name.
+- A preprint server note (bioRxiv, medRxiv, arXiv, OSF Preprints) sets `peer_reviewed: false`.
+
+### Conference note
+
+Path: `Conferences/<event name>.md`, the existing convention. Example: `Conferences/GA4GH 14th Plenary.md`. One note per event instance, so "ISMB 2024" and "ISMB 2026" are two notes with the same `series`.
+
+```yaml
+---
+type: conference
+name: GA4GH 14th Plenary and Connect
+series: GA4GH Plenary               # the recurring meeting, for grouping; blank for a one-off
+start: 2026-09-28
+end: 2026-10-02
+location: Singapore                 # city and region, or "Virtual"
+modality: in person                 # in person | virtual | hybrid
+audience: international             # international | national | regional | institutional | local
+organizer: GA4GH
+url:
+attended: true                      # Alex attended, for the "Conferences attended" section
+---
+# GA4GH 14th Plenary and Connect
+
+Alex's notes from the meeting, as today.
+```
+
+Rules:
+
+- `name`, `start`, `location`, `audience` are required. `end` defaults to `start`. `modality` defaults to `in person` unless `location` is `Virtual`.
+- The two existing conference notes have no frontmatter. Wheatley adds it during migration; until then `etal validate` lists them as missing `type`.
+- A seminar series, a university visit, or a webinar gets a conference note too. The note can be nearly empty; the point is one place for the event's properties and Alex's notes.
 
 ### Publication note
 
@@ -67,7 +142,7 @@ title: "DGIdb 5.0: rebuilding the drug-gene interaction database for precision m
 kind: article            # article | preprint | review | book chapter | white paper | dataset | software | abstract | other
 status: published        # published | accepted | submitted | preprint | in preparation
 date: 2024-01-05         # first online date, the date reports place the paper by
-journal: Nucleic Acids Res
+journal: "[[Nucleic Acids Research]]"
 volume: "52"
 issue: D1
 pages: D1227-D1235
@@ -90,7 +165,7 @@ co_first: []             # printed names sharing first authorship; empty means o
 corresponding:           # printed names marked corresponding
   - Wagner AH
 senior: []               # printed names counted as senior; empty means the last author
-peer_reviewed: true
+peer_reviewed:           # defaults from the journal; set only to override
 doi: 10.1093/nar/gkad1040
 pmid: "37953380"
 pmcid: PMC10767982
@@ -111,14 +186,14 @@ Free text. Reviewer history, where the data lives, anything else.
 
 Rules:
 
-- `title`, `kind`, `status`, `date`, `authors` are required. `journal` is required when `status` is `published` or `accepted`.
+- `title`, `kind`, `status`, `date`, `authors`, `journal` are required. `journal` must resolve to a `Journals/` note. A white paper, dataset, or software release with no venue uses a journal note for its host (Zenodo, GitHub, the publishing body) so the rule has no exceptions.
 - `authors` entries are the printed form. Matching a printed name to a `People/` note goes through that note's `aliases`.
 - A preprint and its published version are two notes. The published note links the preprint through `supersedes`. The citation report counts the published note and folds the preprint's citations into it only when `etal.yaml` sets `merge_superseded: true` (default false, matching how Scholar usually lists them separately).
 - `pmid` and `volume` are quoted so YAML keeps them as strings.
 - Authorship flags are derived, never stored. For a person P with aliases A:
   - first or co-first: `authors[0]` in A, or any name in `co_first` in A.
   - senior or corresponding: any name in `corresponding` in A, or (`senior` empty and `authors[-1]` in A), or any name in `senior` in A.
-  - "first or corresponding peer reviewed": either flag above, and `peer_reviewed` true.
+  - "first or corresponding peer reviewed": either flag above, and the effective `peer_reviewed` true.
 
 ### Presentation note
 
@@ -130,11 +205,11 @@ type: presentation
 title: Automating somatic cancer submissions to ClinVar with GA4GH genomic knowledge standards
 date: 2026-08-03         # YYYY-MM allowed
 kind: invited talk       # poster | invited talk | platform | lightning talk | workshop | panel | course lecture | hackathon | consortium update | other
-event: Cancer Genomics Consortium Annual Meeting 2026
+event: "[[CGC Annual Meeting 2026]]"
 session:                 # optional, named session or track
-location: Houston, TX    # city, or "Virtual"
-modality: in person      # in person | virtual | hybrid
-audience: national       # international | national | regional | institutional | local
+location:                # defaults from the event
+modality:                # defaults from the event
+audience:                # defaults from the event
 presenters:              # ordered wikilinks to People notes; co-presenters outside the lab may be plain names
   - "[[Alex Wagner]]"
 coauthors: []            # printed names on the abstract who did not present, optional
@@ -152,9 +227,10 @@ Free text.
 
 Rules:
 
-- `title`, `date`, `kind`, `event`, `presenters` are required. A hackathon or unconference entry may have an empty `title`; the report prints the event.
+- `title`, `date`, `kind`, `event`, `presenters` are required. `event` must resolve to a `Conferences/` note. A hackathon or unconference entry may have an empty `title`; the report prints the event.
+- `location`, `modality`, and `audience` are set on the presentation only when they differ from the event, for example a talk given virtually into an in-person meeting.
 - A presenter entry that is a wikilink must resolve to a `People/` note. A plain string is accepted for people outside the lab and reported as is.
-- Presentations are reported by `date`. A `YYYY-MM` date sorts first within its month and prints "day not recorded".
+- Presentations are reported by `date`. A `YYYY-MM` date sorts first within its month and prints "day not recorded". `date` must fall within the event's `start` and `end` when both are set; `etal validate` reports a date outside it.
 
 ### Honor note
 
@@ -167,7 +243,8 @@ name: BSGP Distinguished Research Mentor Award
 date: 2024-12-02
 result: won              # won | nominated | finalist
 venue: Ohio State University
-audience: institutional  # international | national | regional | institutional | local
+event:                   # optional wikilink to the Conferences note where it was given
+audience: institutional  # international | national | regional | institutional | local; defaults from event
 recipient: "[[Alex Wagner]]"
 related:                 # optional wikilink to the presentation or publication it recognizes
 notes:
@@ -219,13 +296,11 @@ career_stages:           # reports group publications by the stage containing da
     until: 2020-08-31
   - name: Nationwide Children's Hospital
 merge_superseded: false
-grant_aliases:           # tags used in the lab sheet, for the importer
-  BMK: ClinGen Somatic BMK
-  CIViC: CIViC U24
-  R35: R35
 folders:                 # defaults shown; override only if the vault moves them
   publications: Outputs/Publications
   presentations: Outputs/Presentations
+  journals: Journals
+  conferences: Conferences
   honors: Honors
   awards: Awards
   people: People
@@ -250,7 +325,7 @@ as_of,note,scholar_id,citations
 - `Outputs/Publications.base`: columns title, date, journal, citations, peer_reviewed, grants; sorted by date descending.
 - `Outputs/Presentations.base`: columns date, kind, event, presenters, audience, grants; sorted by date descending.
 
-They are plain YAML in Obsidian's Bases format and can be edited in Obsidian. The tool never rewrites one that exists.
+They are plain YAML in Obsidian's Bases format and can be edited in Obsidian. The tool never rewrites one that exists. A journal or conference note can carry its own embedded Bases block listing the publications or presentations that link to it, in the same pattern the award notes use today; Wheatley adds those from a template, not the tool.
 
 ## Command line
 
@@ -258,34 +333,19 @@ All commands take `--vault PATH` (default: `ETAL_VAULT` environment variable, th
 
 ### `etal init`
 
-Creates `etal.yaml` with defaults, the folders, the two `.base` files, and `People/Alex Wagner.md` if missing. Never overwrites.
+Creates `etal.yaml` with defaults, any configured folder that is missing, the two `.base` files, and `People/Alex Wagner.md` if missing. Never overwrites. Safe to run again.
 
 ### `etal validate`
 
 Parses every note in the configured folders. Checks:
 
 - required properties present, enumerated values valid, dates parse;
-- every wikilink in `grants`, `presenters`, `recipient`, `supersedes`, `related` resolves to a note in the expected folder;
-- no two publication notes share a DOI, PMID, or `scholar_id`;
+- every wikilink in `journal`, `event`, `grants`, `presenters`, `recipient`, `supersedes`, `related` resolves to a note in the expected folder;
+- a presentation's `date` falls within its event's `start` and `end` when those are set;
+- no two publication notes share a DOI, PMID, or `scholar_id`; no two journal notes share an ISSN;
 - every author or presenter name that matches a `lab_member` alias resolves to exactly one person (a name matching two people is an error; a name matching none is fine).
 
 Prints one line per problem, `path: field: message`, then a count. This is also the first step of every other command, and a failure stops that command.
-
-### `etal import sheets`
-
-One-time migration from the two Google Sheets, exported as CSV by Alex.
-
-```
-etal import sheets --citations paper-citations.csv \
-                   --presentations presentations.csv \
-                   --awards awards.csv \
-                   --publications lab-publications.csv
-```
-
-- The citations sheet has section headers (career stage rows) and total rows; those are skipped, and the stage is recorded only to cross-check `career_stages`. Each paper row becomes a publication note with `title`, `date` (year or `YYYY-MM` as given), `citations` and `citations_as_of` (today, flagged in `notes` as "imported from sheet"), `peer_reviewed`, and derived role hints. Because the sheet has flags but no author list, the importer writes `authors: []` and a `notes` line "authors not yet entered; sheet said first: Yes, corresponding: No" so `etal sync ids` (sub-project 2) can fill authors from Crossref and a human can confirm the flags.
-- The presentations sheet maps column for column. Presenter strings like "Wagner, AH; Babb, L" are split on `;` and comma-with-initials patterns, matched against People aliases, and left as plain strings when unmatched. The trailing grant tag column (BMK, R35, CIViC) maps to `grants` through `grant_aliases` in `etal.yaml`.
-- The awards sheet maps to honor notes. The lab publications sheet rows that match an existing publication note by DOI or normalized title are skipped; the rest become notes.
-- Existing notes are never overwritten. Each skipped row is listed with the reason.
 
 ### `etal sync scholar`
 
@@ -308,7 +368,7 @@ Risks and limits, stated plainly: Google Scholar has no API and blocks aggressiv
 Reproduces the Paper Citations sheet for `self` (or `--person "[[Name]]"`).
 
 - Groups publications by `career_stages`, ordered by date within a stage.
-- Columns: title, date, citations, first or co-first, senior or corresponding, peer reviewed, first-or-corresponding-and-peer-reviewed.
+- Columns: title, date, journal abbreviation, citations, first or co-first, senior or corresponding, peer reviewed, first-or-corresponding-and-peer-reviewed.
 - Per-stage totals: count, citations, first count, corresponding count. Grand total, plus the "first or corresponding peer reviewed" count and citation sum.
 - `--format md|csv`, `--kind article,review` (default: everything except `abstract`), `--status published` (default: published and accepted), `--as-of` prints the oldest `citations_as_of` in the set so the reader knows how fresh the counts are.
 
@@ -317,13 +377,13 @@ Reproduces the Paper Citations sheet for `self` (or `--person "[[Name]]"`).
 Drafts the quarterly outputs note in the format of the existing `Outputs/2026-Q3 outputs.md`.
 
 - Window: the quarter, with publications placed by `date` and presentations by `date`. `--lookback 1` (default) also lists items from the prior month that are missing from the previous quarter's note, under "Checked back to".
-- Sections, in the existing note's order: Publications (Alex an author; then accepted not yet published; then lab without Alex), Presentations (Alex; then lab), Honors, Funding (awards whose `start` falls in the window), Open (items with month-only dates or missing links), Sources.
-- Line formats match the existing note exactly: `YYYY-MM-DD | Kind, modality | Presenters. Title. Event, Location. Audience.` and the NLM-style citation line for publications, built from the note's properties.
+- Sections, in the existing note's order: Publications (Alex an author; then accepted not yet published; then lab without Alex), Presentations (Alex; then lab), Honors, Funding (awards whose `start` falls in the window), Conferences attended (conference notes with `attended: true` overlapping the window, with the presentations given there), Open (items with month-only dates or missing links), Sources.
+- Line formats match the existing note exactly: `YYYY-MM-DD | Kind, modality | Presenters. Title. Event name, Location. Audience.` and the NLM-style citation line for publications, built from the note's properties and the journal's abbreviation.
 - Writes to `Outputs/2026-Q3 outputs.md` only when that file does not exist; otherwise prints to stdout for Wheatley to merge. `--stdout` always prints.
 
-### Reports deferred to later sub-projects
+### Deferred to later sub-projects
 
-`etal sync ids` (Crossref, NCBI ID converter, OpenAlex; fills `doi`, `pmid`, `pmcid`, `authors`, `journal`, and flags papers out of NIH public access compliance), `etal report rppr`, `etal sync orcid`, and the profile diff reports are named here so the schema leaves room for them, and specified in their own documents.
+`etal sync ids` (Crossref, NCBI ID converter, OpenAlex, NLM Catalog; fills `doi`, `pmid`, `pmcid`, `authors`, journal `issn` and `nlm_id`, and flags papers out of NIH public access compliance), `etal report rppr`, `etal sync orcid`, and the profile diff reports are named here so the schema leaves room for them, and specified in their own documents.
 
 ## Internal structure
 
@@ -332,15 +392,14 @@ src/etal/
   cli.py            argument parsing only; each subcommand calls one function below
   config.py         load and validate etal.yaml, resolve folders
   vault.py          read a folder of notes into records; write frontmatter back preserving order and body
-  schema.py         dataclasses for Publication, Presentation, Honor, Person, Award; validation rules
+  schema.py         dataclasses for Publication, Presentation, Honor, Journal, Conference, Person, Award; validation rules; inheritance of defaults
   people.py         alias index; resolve printed names to people; derive authorship flags
-  importers/sheets.py
   sync/scholar.py   fetch, match, update, history
   reports/citations.py
   reports/quarter.py
   render.py         Markdown and CSV table helpers; the NLM citation line
 tests/
-  fixtures/vault/   a dozen notes covering every type and edge case (month-only date, co-first, preprint + published pair, unmatched presenter)
+  fixtures/vault/   a small vault covering every type and edge case (month-only date, co-first, preprint + published pair, unmatched presenter, presentation overriding its event's modality, conference note without frontmatter)
   fixtures/scholar/ recorded profile responses
 ```
 
@@ -349,6 +408,7 @@ Dependencies: `python-frontmatter` or a thin wrapper over `PyYAML` that preserve
 Boundaries worth stating:
 
 - `vault.py` is the only module that touches the file system. Everything else works on records, so reports and sync are testable against in-memory data.
+- `schema.py` owns link resolution and default inheritance (publication from journal, presentation and honor from conference). Reports see effective values and never look at the parent themselves.
 - `people.py` owns every name-matching rule. Nothing else compares names.
 - `sync/scholar.py` separates `fetch()` (network) from `match()` and `apply()` (pure), so tests use recorded responses.
 
@@ -362,24 +422,24 @@ Boundaries worth stating:
 
 ## Testing
 
-- Unit tests for name matching, flag derivation, date parsing (`YYYY`, `YYYY-MM`, `YYYY-MM-DD`), title normalization, and the NLM citation line.
+- Unit tests for name matching, flag derivation, default inheritance, date parsing (`YYYY`, `YYYY-MM`, `YYYY-MM-DD`), title normalization, and the NLM citation line.
 - Round-trip tests: read a fixture note, write it back with one property changed, assert the body and every other property are byte-identical.
 - Sync tests against recorded Scholar responses, including an unmatched work and a title that differs only in punctuation.
 - Report tests compare rendered output to golden files for the fixture vault, including the quarter note.
-- An importer test on small CSV excerpts of both real sheets, with the trickier presenter strings ("Alex, Kori, Matthew and others", "Wagner, A, Puthawala, D").
 - No test touches the network.
 
 ## Migration
 
-1. Alex exports the two sheets to CSV.
-2. Wheatley (or Alex) runs `etal init` then `etal import sheets --dry-run`, reviews, then runs it for real.
-3. Wheatley adds `aliases` and `lab_member` to the lab's People notes and creates missing ones for presenters the import left as plain strings.
-4. `etal validate`, fix what it lists, `etal sync scholar`, `etal report citations` and compare the totals to the sheet (48 papers, 7068 citations as of the sheet's last update).
-5. Wheatley commits in the vault. From then on, new outputs are added as notes, and the quarterly note starts from `etal report quarter`.
+The migration from the two Google Sheets and the existing quarterly notes is Wheatley's work, done by hand in the vault under its own rules, following `docs/wheatley-migration.md`. That document carries the column mappings, the name and date rules, and the checks. In outline:
+
+1. Alex gives Wheatley the two sheets as CSV, and Wheatley reads the existing `Outputs/YYYY-Qn outputs.md` notes.
+2. Wheatley creates the journal, conference, and missing people notes first, then publications, presentations, and honors, committing each batch under the vault's git rules.
+3. Once `etal` is installed: `etal init`, `etal validate`, fix what it lists, `etal sync scholar`, then `etal report citations` and compare totals and flags to the sheet. Flag differences point at `co_first`, `corresponding`, or `senior` lists to correct.
+4. From then on, new outputs are added as notes, and the quarterly note starts from `etal report quarter`.
 
 ## Roadmap
 
-1. **Foundation** (this spec): schema, `init`, `validate`, `import sheets`, `sync scholar`, `report citations`, `report quarter`.
-2. **Identifiers and compliance**: `sync ids` via Crossref, NCBI, OpenAlex; author lists filled from metadata; NIH public access (PMCID) check; iCite metrics as additional properties.
+1. **Foundation** (this spec): schema, `init`, `validate`, `sync scholar`, `report citations`, `report quarter`; the Wheatley migration procedure.
+2. **Identifiers and compliance**: `sync ids` via Crossref, NCBI, OpenAlex, NLM Catalog; author lists and journal identifiers filled from metadata; NIH public access (PMCID) check; iCite metrics as additional properties.
 3. **RPPR**: `report rppr` per award and period, in the order and wording section C.1 wants; presentations and honors included as "other products".
 4. **Profile cross-links**: ORCID read and push, myNCBI bibliography diff, Zenodo and Google Scholar presence diff; a `links` property on publications listing where each record exists.
