@@ -1,3 +1,4 @@
+import datetime as dt
 import os
 import sys
 from pathlib import Path
@@ -7,7 +8,14 @@ import click
 from etal import __version__, init_vault, schema
 from etal.config import Config, ConfigError, find_vault, load_config
 from etal.reports import citations as citations_report
-from etal.vault import write_text
+from etal.reports import quarter as quarter_report
+from etal.vault import exists, write_text
+
+
+def today() -> dt.date:
+    """Today's date; ETAL_TODAY (ISO) overrides it so reports are reproducible."""
+    override = os.environ.get("ETAL_TODAY")
+    return dt.date.fromisoformat(override) if override else dt.date.today()
 
 
 def run_validation(vault: Path) -> tuple[Config, schema.VaultData]:
@@ -102,3 +110,32 @@ def citations_cmd(ctx, output, formats, statuses, person, as_of, to):
         write_text(to, text)
     else:
         click.echo(text, nl=False)
+
+
+@report.command("quarter")
+@click.argument("quarter_label", metavar="QUARTER")
+@click.option("--lookback", type=click.IntRange(min=0), default=1, show_default=True, help="Months before the quarter to check for unlisted items.")
+@click.option("--stdout", "to_stdout", is_flag=True, help="Print the note without writing it.")
+@click.option("--dry-run", is_flag=True, help="Print what would be written without writing.")
+@click.pass_context
+def quarter_cmd(ctx, quarter_label, lookback, to_stdout, dry_run):
+    """Draft the quarterly outputs note, for example 2026-Q3."""
+    config, data = run_validation(_vault_from(ctx))
+    try:
+        q = quarter_report.Quarter.parse(quarter_label)
+    except ValueError as exc:
+        raise click.ClickException(str(exc))
+    text = quarter_report.render(quarter_report.build(data, q, lookback), q, today())
+    target = config.folder("publications").parent / f"{q.label} outputs.md"
+    shown = target.relative_to(config.root).as_posix()
+    if not to_stdout:
+        if exists(target):
+            click.echo(f"{shown} already exists; printing instead.")
+        elif dry_run:
+            click.echo(f"Would write {shown}")
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            write_text(target, text)
+            click.echo(f"Wrote {shown}")
+            return
+    click.echo(text, nl=False)
