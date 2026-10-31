@@ -39,7 +39,7 @@ Convert every record into the schema's properties using the mapping from A2 and 
 - **Dates** are ISO. `YYYY-MM-DD` when known, `YYYY-MM` when only the month is known, `YYYY` only for honors where the source gives a year alone. Never invent a day. For a publication, `date` is the first online date; when the source gives only an issue date, resolve the paper (A3, publications) to find the earlier one.
 - **Names** are kept in the printed form the source used, in `authors`, `coauthors`, and `co_first`. People notes carry the variants in `aliases`; add a variant to the person's note the first time you meet it.
 - **Links** (`journal`, `event`, `presenters`, `recipient`, `grants`) are wikilinks to notes that must exist. Create the journal, conference, person, or award note first, from the parent's own section in Part B, then link.
-- **Enumerated values** (`kind`, `status`, `modality`, `audience`, `result`) use the schema's vocabulary. Map the source's wording to it and keep the original wording in `notes` when the mapping lost something.
+- **Enumerated values** (`format`, `status`, `attendance`, `audience`, `result`) use the schema's vocabulary. Map the source's wording to it and keep the original wording in `notes` when the mapping lost something.
 - **Publications** are resolved against PubMed or Crossref by DOI, PMID, or title before the note is written. The resolved record supplies `title` as published, `date`, `journal`, `volume`, `issue`, `pages`, `authors`, `doi`, `pmid`, `pmcid`. A source's version of these fields is a check on the resolved record, not a competitor to it. A paper that cannot be resolved gets a note with what the source has, `authors: []` if the source gave none, and a `notes` line saying it is unresolved.
 
 ## A4. Match against existing notes
@@ -159,7 +159,7 @@ tenure:
 
 `Outputs/YYYY-Qn outputs.md` in the vault, today only `2026-Q3 outputs.md`, written by Wheatley from the sources it names at its foot. Precedence tier 5. Record types: publications, presentations, honors (under trainee highlights and shout-outs), funding, conferences attended.
 
-The lines already carry authors, journals, DOIs, PMIDs, presenters, events, locations, audiences, and links, in the exact format the quarter report will reproduce. Every item becomes a note. Links in the form `[Slides](...)` and `[Poster PDF](...)` go in `slides` and `poster`. "Day not recorded" means a `YYYY-MM` date. The "Conferences attended" section sets `attended: true` on those conference notes and supplies their dates.
+The lines already carry authors, journals, DOIs, PMIDs, presenters, events, locations, audiences, and links, in the exact format the quarter report will reproduce. Every item becomes a note. The words after the format ("Invited talk, in person", "Oral presentation, virtual") are `attendance`. Links in the form `[Slides](...)` and `[Poster PDF](...)` go in `slides` and `poster`. "Day not recorded" means a `YYYY-MM` date. The "Conferences attended" section sets `attended: true` on those conference notes and supplies their dates.
 
 ## B4. The Paper Citations sheet
 
@@ -180,7 +180,7 @@ Columns: Title, Month / Year, Citations, First / co-first, Senior / Correspondin
 **Presentations tab.** Columns: Date, Presentation Type, Event, Venue, Audience, Presenters, Title, and an unlabeled eighth column holding a grant tag (BMK, R35, CIViC, "-", or a note).
 
 - **Date**: `YYYY-MM-DD`. "July 2026" gives `2026-07`. "Friday, May 8, 2026" gives `2026-05-08`.
-- **Presentation Type** to `kind`:
+- **Presentation Type** to `format`:
   - Poster Presentation: `poster`
   - Invited Talk: `invited talk`
   - Platform Presentation, Oral Presentation, Talk, TERI Talk, Tech Talk: `platform`
@@ -192,7 +192,7 @@ Columns: Title, Month / Year, Citations, First / co-first, Senior / Correspondin
   - Consortium Update: `consortium update`
   - Anything else: `other`, with the original wording in `notes`.
 - **Event**: a conference note. Name it the way the Event column reads, with the year added when the series recurs and the sheet left it off ("CGC Annual Meeting" in 2021 becomes "CGC Annual Meeting 2021"). Keep the vault's existing name when a note already exists. `series` is the stable name without the year or ordinal ("ISMB", "CGC Annual Meeting", "GA4GH Plenary", "GA4GH Connect", "IGM Research in Review"); blank for a one-off. Seminar series and single visits ("NIH BISTI Seminar Series", "Brigham Young University", "EMQN Seminar Series") get conference notes too. `start` and `end` are the earliest and latest presentation dates at that event unless you know the real dates; say which in the note body.
-- **Venue**: `location` on the conference note, without any parenthetical. "St. Louis, MO (attended virtual)" gives `location: St. Louis, MO` on the conference and `modality: virtual` on that presentation only. "Virtual" gives `location: Virtual` and `modality: virtual` on the conference.
+- **Venue**: `location` on the conference note, without any parenthetical. "St. Louis, MO (attended virtual)" gives `location: St. Louis, MO` on the conference and `attendance: virtual` on that presentation. "Virtual" gives `location: Virtual` on the conference and `attendance: virtual` on every presentation at it. Any other venue gives `attendance: in person`. `attendance` is required on every presentation and is never left for the conference to supply; when a row leaves you unsure, write `in person` and queue the row.
 - **Audience**: lowercased, on the conference note. Where the sheet leaves it blank, take it from another row for the same event. A difference in audience between rows of the same event is a question for Alex, not a per-row override. Where no row has it, leave it blank and queue it.
 - **Presenters**: split on `;` first. Within each part, "Last, Initials" or "Last Initials" is one person; a part with several names separated by commas and no initials ("Alex, Kori, Matthew and others") is several people. Match each to a `People/` note through `aliases` and write the wikilink. A name with no note is written as a plain string. "and others" goes in `notes`. Keep the printed order.
 - **Title**: as given. A hackathon row with no title keeps `title` empty.
@@ -218,7 +218,7 @@ Each goes through Part A. Notes on what to expect:
 - **An NIH RPPR** or its products section. Tier 4. Its value is grant attribution: every product it lists under an award gets that award in `grants`, with the RPPR in `sources`.
 - **A myNCBI or PubMed bibliography export**, or **an ORCID works export**. Tier 2 for identifiers, nothing for flags or counts. Useful for catching papers no hand-kept list has, and for `pmcid`.
 - **A Google Scholar export** (CSV or BibTeX from the profile). Counts are tier 3 by `citations_as_of`; everything else is tier 7, because Scholar's metadata is scraped and often wrong. Its main value is `scholar_id` per paper, which it does not export; those still come from `etal sync scholar`.
-- **A Zotero library or BibTeX file**. Tier 7 for metadata (resolve against PubMed anyway), but a good source of DOIs for older papers and of `kind` for book chapters and reports.
+- **A Zotero library or BibTeX file**. Tier 7 for metadata (resolve against PubMed anyway), but a good source of DOIs for older papers and of `format` for book chapters and reports.
 - **A departmental or institutional report**. Tier 7. Often the only record of institutional honors and internal talks.
 
 ## Open items to put on the queue

@@ -114,7 +114,6 @@ series: GA4GH Plenary               # the recurring meeting, for grouping; blank
 start: 2026-09-28
 end: 2026-10-02
 location: Singapore                 # city and region, or "Virtual"
-modality: in person                 # how the meeting was held: in person | virtual | hybrid
 audience: international             # international | national | regional | institutional | local
 organizer: GA4GH
 url:
@@ -127,7 +126,8 @@ Alex's notes from the meeting, as today.
 
 Rules:
 
-- `name`, `start`, `location`, `audience` are required. `end` defaults to `start`. `modality` defaults to `in person` unless `location` is `Virtual`.
+- `name`, `start`, `location`, `audience` are required. `end` defaults to `start`.
+- Whether a meeting was in person, virtual, or hybrid is not recorded on the conference. Most meetings are now hybrid in some proportion, so the fact that matters, how each person took part, lives on the presentation as `attendance`.
 - The two existing conference notes have no frontmatter. Wheatley adds it during migration; until then `etal validate` lists them as missing `type`.
 - A seminar series, a university visit, or a webinar gets a conference note too. The note can be nearly empty; the point is one place for the event's properties and Alex's notes.
 
@@ -139,7 +139,7 @@ Path: `Outputs/Publications/<year> <short title>.md`. The short title is a few w
 ---
 type: publication
 title: "DGIdb 5.0: rebuilding the drug-gene interaction database for precision medicine and drug discovery platforms"
-kind: article            # article | preprint | review | book chapter | white paper | dataset | software | abstract | other
+format: article          # article | preprint | review | book chapter | white paper | dataset | software | abstract | other
 status: published        # published | accepted | submitted | preprint | in preparation
 date: 2024-01-05         # first online date, the date reports place the paper by
 journal: "[[Nucleic Acids Research]]"
@@ -191,7 +191,7 @@ Free text. Reviewer history, where the data lives, anything else.
 Rules:
 
 - `sources` is optional on every output note type (publication, presentation, honor). It is provenance for merges, written by Wheatley during imports and by `etal sync` when it changes a value. Reports ignore it.
-- `title`, `kind`, `status`, `date`, `authors`, `journal` are required. `journal` must resolve to a `Journals/` note. A white paper, dataset, or software release with no venue uses a journal note for its host (Zenodo, GitHub, the publishing body) so the rule has no exceptions.
+- `title`, `format`, `status`, `date`, `authors`, `journal` are required. `journal` must resolve to a `Journals/` note. A white paper, dataset, or software release with no venue uses a journal note for its host (Zenodo, GitHub, the publishing body) so the rule has no exceptions.
 - `authors` entries are the printed form. Matching a printed name to a `People/` note goes through that note's `aliases`.
 - A preprint and its published version are two notes. The published note links the preprint through `supersedes`. The citation report counts the published note and folds the preprint's citations into it only when `etal.yaml` sets `merge_superseded: true` (default false, matching how Scholar usually lists them separately).
 - `pmid` and `volume` are quoted so YAML keeps them as strings.
@@ -210,11 +210,11 @@ Path: `Outputs/Presentations/<date> <short title>.md`. Example: `Outputs/Present
 type: presentation
 title: Automating somatic cancer submissions to ClinVar with GA4GH genomic knowledge standards
 date: 2026-08-03         # YYYY-MM allowed
-kind: invited talk       # poster | invited talk | platform | lightning talk | workshop | panel | course lecture | hackathon | consortium update | other
+format: invited talk     # poster | invited talk | platform | lightning talk | workshop | panel | course lecture | hackathon | consortium update | other
+attendance: in person    # how the presenter took part: in person | virtual. Required; never inherited from the event
 event: "[[CGC Annual Meeting 2026]]"
 session:                 # optional, named session or track
 location:                # defaults from the event
-modality:                # how this talk was given, in person | virtual | hybrid; defaults from the event, set only for a virtual talk into an in-person meeting or the reverse
 audience:                # defaults from the event
 presenters:              # ordered wikilinks to People notes; co-presenters outside the lab may be plain names
   - "[[Alex Wagner]]"
@@ -233,8 +233,8 @@ Free text.
 
 Rules:
 
-- `title`, `date`, `kind`, `event`, `presenters` are required. `event` must resolve to a `Conferences/` note. A hackathon or unconference entry may have an empty `title`; the report prints the event.
-- `location`, `modality`, and `audience` are set on the presentation only when they differ from the event, for example a talk given virtually into an in-person meeting.
+- `title`, `date`, `format`, `attendance`, `event`, `presenters` are required. `event` must resolve to a `Conferences/` note. A hackathon or unconference entry may have an empty `title`; the report prints the event.
+- `location` and `audience` are set on the presentation only when they differ from the event, for example a satellite session held in another city.
 - A presenter entry that is a wikilink must resolve to a `People/` note. A plain string is accepted for people outside the lab and reported as is.
 - Presentations are reported by `date`. A `YYYY-MM` date sorts first within its month and prints "day not recorded". `date` must fall within the event's `start` and `end` when both are set; `etal validate` reports a date outside it.
 
@@ -333,7 +333,7 @@ So a base does for the vault what the Paper Citations sheet does today, with one
 `etal init` writes two standalone files, as a convenience for looking at and hand-editing the records:
 
 - `Outputs/Publications.base`: every note in `Outputs/Publications`, columns title, date, journal, citations, peer_reviewed, grants, sorted by date descending.
-- `Outputs/Presentations.base`: every note in `Outputs/Presentations`, columns date, kind, event, presenters, audience, grants, sorted by date descending.
+- `Outputs/Presentations.base`: every note in `Outputs/Presentations`, columns date, format, attendance, event, presenters, audience, grants, sorted by date descending.
 
 They are plain YAML in Obsidian's Bases format, and Obsidian's own editor can change them (add a column, change a sort). The tool never rewrites one that exists, and nothing in the tool reads them. Reports are computed from the notes, not from a base.
 
@@ -382,7 +382,7 @@ Reproduces the Paper Citations sheet for `self` (or `--person "[[Name]]"`).
 - Groups publications by `career_stages`, ordered by date within a stage.
 - Columns: title, date, journal abbreviation, citations, first or co-first, senior or corresponding, peer reviewed, first-or-corresponding-and-peer-reviewed.
 - Per-stage totals: count, citations, first count, corresponding count. Grand total, plus the "first or corresponding peer reviewed" count and citation sum.
-- `--format md|csv`, `--kind article,review` (default: everything except `abstract`), `--status published` (default: published and accepted), `--as-of` prints the oldest `citations_as_of` in the set so the reader knows how fresh the counts are.
+- `--output md|csv`, `--format article,review` (default: everything except `abstract`), `--status published` (default: published and accepted), `--as-of` prints the oldest `citations_as_of` in the set so the reader knows how fresh the counts are.
 
 ### `etal report quarter 2026-Q3`
 
@@ -390,7 +390,7 @@ Drafts the quarterly outputs note in the format of the existing `Outputs/2026-Q3
 
 - Window: the quarter, with publications placed by `date` and presentations by `date`. `--lookback 1` (default) also lists items from the prior month that are missing from the previous quarter's note, under "Checked back to".
 - Sections, in the existing note's order: Publications (Alex an author; then accepted not yet published; then lab without Alex), Presentations (Alex; then lab), Honors, Funding (awards whose `start` falls in the window), Conferences attended (conference notes with `attended: true` overlapping the window, with the presentations given there), Open (items with month-only dates or missing links), Sources.
-- Line formats match the existing note exactly: `YYYY-MM-DD | Kind, modality | Presenters. Title. Event name, Location. Audience.` and the NLM-style citation line for publications, built from the note's properties and the journal's abbreviation.
+- Line formats match the existing note exactly: `YYYY-MM-DD | Format, attendance | Presenters. Title. Event name, Location. Audience.` and the NLM-style citation line for publications, built from the note's properties and the journal's abbreviation.
 - Writes to `Outputs/2026-Q3 outputs.md` only when that file does not exist; otherwise prints to stdout for Wheatley to merge. `--stdout` always prints.
 
 ### Deferred to later sub-projects
@@ -411,7 +411,7 @@ src/etal/
   reports/quarter.py
   render.py         Markdown and CSV table helpers; the NLM citation line
 tests/
-  fixtures/vault/   a small vault covering every type and edge case (month-only date, co-first, preprint + published pair, unmatched presenter, presentation overriding its event's modality, conference note without frontmatter)
+  fixtures/vault/   a small vault covering every type and edge case (month-only date, co-first, preprint + published pair, unmatched presenter, presentation overriding its event's location, conference note without frontmatter)
   fixtures/scholar/ recorded profile responses
 ```
 
