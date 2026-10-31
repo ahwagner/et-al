@@ -114,6 +114,7 @@ def _until(value: object, where: str) -> dt.date | None:
 
 
 def load_config(root: Path) -> Config:
+    root = root.resolve()
     path = root / CONFIG_NAME
     if not path.is_file():
         raise ConfigError(f"{path}: not found; run `etal init`")
@@ -128,7 +129,11 @@ def load_config(root: Path) -> Config:
         if not data.get(field):
             raise ConfigError(f"{path}: {field}: required")
 
-    self_name = parse_wikilink(str(data["self"]))
+    if not isinstance(data["self"], str):
+        raise ConfigError(
+            f'{path}: self: the wikilink must be quoted, as self: "[[Alex Wagner]]"'
+        )
+    self_name = parse_wikilink(data["self"])
     if self_name is None:
         raise ConfigError(f"{path}: self: expected a wikilink such as [[Alex Wagner]]")
 
@@ -150,12 +155,16 @@ def load_config(root: Path) -> Config:
         raise ConfigError(f"{path}: folders: expected a mapping")
     folders = {**DEFAULT_FOLDERS, **{str(k): str(v) for k, v in overrides.items()}}
 
+    merge_superseded = data.get("merge_superseded", False)
+    if not isinstance(merge_superseded, bool):
+        raise ConfigError(f"{path}: merge_superseded: expected true or false")
+
     return Config(
         root=root,
         self_name=self_name,
         scholar_profile=str(data["scholar_profile"]),
         career_stages=stages,
-        merge_superseded=bool(data.get("merge_superseded", False)),
+        merge_superseded=merge_superseded,
         folders=folders,
     )
 
@@ -163,11 +172,11 @@ def load_config(root: Path) -> Config:
 def find_vault(cli_value: str | None) -> Path:
     """CLI value, else ETAL_VAULT, else the current directory if it holds etal.yaml."""
     if cli_value:
-        return Path(cli_value).expanduser()
+        return Path(cli_value).expanduser().resolve()
     env = os.environ.get("ETAL_VAULT")
     if env:
-        return Path(env).expanduser()
-    cwd = Path.cwd()
+        return Path(env).expanduser().resolve()
+    cwd = Path.cwd().resolve()
     if (cwd / CONFIG_NAME).is_file():
         return cwd
     raise ConfigError(

@@ -1,6 +1,7 @@
 import datetime as dt
 import pytest
-from etal.config import Config, ConfigError, DEFAULT_CONFIG_TEXT, load_config, find_vault, parse_wikilink
+from pathlib import Path
+from etal.config import ConfigError, DEFAULT_CONFIG_TEXT, load_config, find_vault, parse_wikilink
 from etal.dates import PartialDate
 
 def test_default_config_loads(tmp_path):
@@ -46,3 +47,28 @@ def test_parse_wikilink(raw):
 
 def test_parse_wikilink_without_brackets_is_none():
     assert parse_wikilink("Name") is None
+
+def test_relative_root_gives_absolute_paths(tmp_path, monkeypatch):
+    (tmp_path / "etal.yaml").write_text(DEFAULT_CONFIG_TEXT)
+    monkeypatch.chdir(tmp_path)
+    cfg = load_config(Path("."))
+    assert cfg.folder("people").is_absolute()
+    assert cfg.folder("people") == tmp_path.resolve() / "People"
+
+def test_find_vault_returns_absolute_path(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert find_vault(".") == tmp_path.resolve()
+    monkeypatch.setenv("ETAL_VAULT", ".")
+    assert find_vault(None) == tmp_path.resolve()
+
+def test_unquoted_self_wikilink_is_an_error(tmp_path):
+    (tmp_path / "etal.yaml").write_text(
+        "self: [[Alex Wagner]]\nscholar_profile: x\ncareer_stages:\n  - name: Only\n")
+    with pytest.raises(ConfigError, match="self.*quote"):
+        load_config(tmp_path)
+
+def test_merge_superseded_must_be_bool(tmp_path):
+    (tmp_path / "etal.yaml").write_text(
+        'self: "[[A B]]"\nscholar_profile: x\nmerge_superseded: "no"\ncareer_stages:\n  - name: Only\n')
+    with pytest.raises(ConfigError, match="merge_superseded"):
+        load_config(tmp_path)
