@@ -504,9 +504,24 @@ def load(config: Config) -> VaultData:
     return data
 
 
-def _missing(out: list[Problem], record: Any, key: str, present: bool) -> None:
-    if not present:
-        out.append(Problem(record.note.path, key, "required"))
+# Required properties per record type. A bare name is both the property and the record attribute.
+# A pair is (property, attribute) where the attribute holds the raw link text or the raw list.
+# A required list must be non-empty. Presentation `title` has its own rule in _validate_presentations.
+_REQUIRED: dict[type, tuple[str | tuple[str, str], ...]] = {
+    Journal: ("name", "abbreviation", "peer_reviewed"),
+    Conference: ("name", "start", "location", "audience"),
+    Publication: ("title", "format", "status", "date", "authors", ("journal", "journal_link")),
+    Presentation: ("date", "format", "attendance", ("event", "event_link"), ("presenters", "presenter_links")),
+    Honor: ("name", "date", "result", ("recipient", "recipient_link")),
+}
+
+
+def _required(out: list[Problem], record: Any) -> None:
+    for entry in _REQUIRED[type(record)]:
+        key, attr = (entry, entry) if isinstance(entry, str) else entry
+        value = getattr(record, attr)
+        if value is None or (isinstance(value, list) and not value):
+            out.append(Problem(record.note.path, key, "required"))
 
 
 def _enum(out: list[Problem], record: Any, key: str, value: str | None, allowed: list[str]) -> None:
@@ -530,30 +545,16 @@ def _duplicates(out: list[Problem], items: list[tuple[Any, str, str | None]]) ->
 
 
 def _validate_journals(data: VaultData, out: list[Problem]) -> None:
-    for j in data.journals:
-        _missing(out, j, "name", j.name is not None)
-        _missing(out, j, "abbreviation", j.abbreviation is not None)
-        _missing(out, j, "peer_reviewed", j.peer_reviewed is not None)
     _duplicates(out, [(j, key, getattr(j, key)) for j in data.journals for key in ("issn", "eissn")])
 
 
 def _validate_conferences(data: VaultData, out: list[Problem]) -> None:
     for c in data.conferences:
-        _missing(out, c, "name", c.name is not None)
-        _missing(out, c, "start", c.start is not None)
-        _missing(out, c, "location", c.location is not None)
-        _missing(out, c, "audience", c.audience is not None)
         _enum(out, c, "audience", c.audience, AUDIENCES)
 
 
 def _validate_publications(data: VaultData, out: list[Problem], ambiguous: Callable[[Any, str, list[str]], None]) -> None:
     for pub in data.publications:
-        _missing(out, pub, "title", pub.title is not None)
-        _missing(out, pub, "format", pub.format is not None)
-        _missing(out, pub, "status", pub.status is not None)
-        _missing(out, pub, "date", pub.date is not None)
-        _missing(out, pub, "authors", bool(pub.authors))
-        _missing(out, pub, "journal", pub.journal_link is not None)
         _enum(out, pub, "format", pub.format, PUBLICATION_FORMATS)
         _enum(out, pub, "status", pub.status, PUBLICATION_STATUSES)
         _enum(out, pub, "stage", pub.stage, data.config.stage_names)
@@ -567,12 +568,8 @@ def _validate_presentations(data: VaultData, out: list[Problem], ambiguous: Call
     for pres in data.presentations:
         # A hackathon or workshop may carry a blank title, but the property must still be there.
         blank_ok = pres.format in ("hackathon", "workshop") and "title" in (pres.note.frontmatter or {})
-        _missing(out, pres, "title", pres.title is not None or blank_ok)
-        _missing(out, pres, "date", pres.date is not None)
-        _missing(out, pres, "format", pres.format is not None)
-        _missing(out, pres, "attendance", pres.attendance is not None)
-        _missing(out, pres, "event", pres.event_link is not None)
-        _missing(out, pres, "presenters", bool(pres.presenter_links))
+        if pres.title is None and not blank_ok:
+            out.append(Problem(pres.note.path, "title", "required"))
         _enum(out, pres, "format", pres.format, PRESENTATION_FORMATS)
         _enum(out, pres, "attendance", pres.attendance, ATTENDANCE)
         _enum(out, pres, "audience", pres.audience_own, AUDIENCES)
@@ -587,10 +584,6 @@ def _validate_presentations(data: VaultData, out: list[Problem], ambiguous: Call
 
 def _validate_honors(data: VaultData, out: list[Problem]) -> None:
     for honor in data.honors:
-        _missing(out, honor, "name", honor.name is not None)
-        _missing(out, honor, "date", honor.date is not None)
-        _missing(out, honor, "result", honor.result is not None)
-        _missing(out, honor, "recipient", honor.recipient_link is not None)
         _enum(out, honor, "result", honor.result, HONOR_RESULTS)
         _enum(out, honor, "audience", honor.audience_own, AUDIENCES)
 
@@ -609,6 +602,9 @@ def validate(data: VaultData) -> list[Problem]:
                 who = ", ".join(sorted(p.note.name for p in found))
                 out.append(Problem(record.note.path, key, f"'{name}' matches more than one person: {who}"))
 
+    for records in (data.journals, data.conferences, data.publications, data.presentations, data.honors):
+        for record in records:
+            _required(out, record)
     _validate_journals(data, out)
     _validate_conferences(data, out)
     for award in data.awards:
