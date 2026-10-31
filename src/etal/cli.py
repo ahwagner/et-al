@@ -1,14 +1,18 @@
 import datetime as dt
+import io
 import os
 import sys
 from pathlib import Path
 
 import click
+from rich.console import Console
+from rich.table import Table
 
 from etal import __version__, init_vault, schema
 from etal.config import Config, ConfigError, find_vault, load_config
 from etal.reports import citations as citations_report
 from etal.reports import quarter as quarter_report
+from etal.sync import scholar as scholar_sync
 from etal.vault import exists, write_text
 
 
@@ -140,3 +144,68 @@ def quarter_cmd(ctx, quarter_label, lookback, to_stdout, dry_run):
             click.echo(f"Wrote {shown}")
             return
     click.echo(text, nl=False)
+
+
+@main.group()
+def sync():
+    """Pull data from outside the vault into the notes."""
+
+
+@sync.command("scholar")
+@click.option("--only", "only", default=None, metavar="NOTE", help="Sync just this publication note.")
+@click.option("--force", is_flag=True, help="Sync even if a sync already ran today.")
+@click.option("--dry-run", is_flag=True, help="Show what would change without writing.")
+@click.pass_context
+def scholar_cmd(ctx, only, force, dry_run):
+    """Update citation counts and Scholar ids from your Google Scholar profile."""
+    config, data = run_validation(_vault_from(ctx))
+    names = {pub.note.name for pub in data.publications}
+    if only is not None and only not in names:
+        raise click.ClickException(f"no publication note named {only!r}")
+    as_of = today()
+    if not force and scholar_sync.last_sync_date(config.history_path) == as_of:
+        click.echo("already synced today; use --force")
+        sys.exit(2)
+    fixture = os.environ.get("ETAL_SCHOLAR_FIXTURE")
+    try:
+        works = scholar_sync.works_from_json(Path(fixture)) if fixture else scholar_sync.fetch(config.scholar_profile)
+    except scholar_sync.FetchError as exc:
+        click.echo(str(exc))
+        sys.exit(2)
+    result = scholar_sync.match(works, data.publications)
+    if only is not None:
+        result = scholar_sync.only(result, only)
+    changes = scholar_sync.apply(data, result, as_of, dry_run)
+
+    if changes:
+        table = Table()
+        table.add_column("Note", no_wrap=True)
+        table.add_column("Old", justify="right")
+        table.add_column("New", justify="right")
+        table.add_column("Scholar id", no_wrap=True)
+        works_by_note = {pub.note.name: work for pub, work in result.matched}
+        for change in changes:
+            name = change.pub.note.name
+            table.add_row(
+                name,
+                "" if change.old is None else str(change.old),
+                str(change.new),
+                works_by_note[name].scholar_id + (" (new)" if change.scholar_id_added else ""),
+            )
+        buffer = io.StringIO()
+        Console(file=buffer, width=240, color_system=None, force_terminal=False).print(table)
+        click.echo(buffer.getvalue(), nl=False)
+    unchanged = len(result.matched) - len(changes)
+    click.echo(f"{len(changes)} updated, {unchanged} unchanged")
+    click.echo("Scholar works with no note:")
+    for work in result.unmatched_works:
+        click.echo(f"  {work.title} ({work.year or 'n.d.'}, {work.citations} citations)")
+    if not result.unmatched_works:
+        click.echo("  (none)")
+    click.echo("Notes with no Scholar match:")
+    for pub in result.unmatched_pubs:
+        click.echo(f"  {pub.note.name}")
+    if not result.unmatched_pubs:
+        click.echo("  (none)")
+    if dry_run:
+        click.echo("Dry run: nothing written.")
