@@ -95,7 +95,7 @@ Before `etal` exists: `obsidian unresolved verbose` finds every wikilink that do
 Once `etal` is installed:
 
 1. `etal init` in the vault, then `etal validate`. Fix what it lists.
-2. `etal report citations --format csv` and compare to the Paper Citations sheet: per stage 7, 15, and 26 papers with 561, 3432, and 3075 citations; grand total 48 and 7068; "first or corresponding peer reviewed" 21 and 3806. Compare the per-paper flag columns row by row. A flag that differs means a `co_first`, `corresponding`, `senior`, `peer_reviewed`, or `stage` value to correct, or a sheet error to report to Alex. Record which.
+2. `etal report citations --output csv` and compare to the Paper Citations sheet: per stage 7, 15, and 26 papers with 561, 3432, and 3075 citations; grand total 48 and 7068; "first or corresponding peer reviewed" 21 and 3806. Compare the per-paper flag columns row by row. A flag that differs means a `co_first`, `corresponding`, `senior`, `peer_reviewed`, or `stage` value to correct, or a sheet error to report to Alex. Record which.
 3. `etal sync scholar`. Review the two unmatched lists it prints and add `scholar_id` by hand where the title differs.
 4. `etal report quarter 2026-Q3 --stdout` and compare to the hand-written `Outputs/2026-Q3 outputs.md`. Differences are either missing properties in the notes or a report bug to raise in the `et-al` repository.
 
