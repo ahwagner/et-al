@@ -114,7 +114,7 @@ series: GA4GH Plenary               # the recurring meeting, for grouping; blank
 start: 2026-09-28
 end: 2026-10-02
 location: Singapore                 # city and region, or "Virtual"
-modality: in person                 # in person | virtual | hybrid
+modality: in person                 # how the meeting was held: in person | virtual | hybrid
 audience: international             # international | national | regional | institutional | local
 organizer: GA4GH
 url:
@@ -214,7 +214,7 @@ kind: invited talk       # poster | invited talk | platform | lightning talk | w
 event: "[[CGC Annual Meeting 2026]]"
 session:                 # optional, named session or track
 location:                # defaults from the event
-modality:                # defaults from the event
+modality:                # how this talk was given, in person | virtual | hybrid; defaults from the event, set only for a virtual talk into an in-person meeting or the reverse
 audience:                # defaults from the event
 presenters:              # ordered wikilinks to People notes; co-presenters outside the lab may be plain names
   - "[[Alex Wagner]]"
