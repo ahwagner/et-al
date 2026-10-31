@@ -59,7 +59,10 @@ def validate(ctx):
 def init(ctx, dry_run):
     """Create the config, folders, Bases views, and your People note where missing."""
     root = Path(ctx.obj["vault"] or os.environ.get("ETAL_VAULT") or ".").expanduser().resolve()
-    created = init_vault.run(root, dry_run)
+    try:
+        created = init_vault.run(root, dry_run)
+    except ConfigError as exc:
+        raise click.ClickException(str(exc))
     if not created:
         click.echo("Nothing to do")
         return

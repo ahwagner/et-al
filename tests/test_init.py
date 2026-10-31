@@ -1,6 +1,7 @@
 from click.testing import CliRunner
 from etal.cli import main
-from etal.init_vault import run
+from etal.config import DEFAULT_CONFIG_TEXT
+from etal.init_vault import PUBLICATIONS_BASE, run
 
 def test_init_creates_and_is_idempotent(tmp_path):
     created = run(tmp_path, dry_run=False)
@@ -9,12 +10,19 @@ def test_init_creates_and_is_idempotent(tmp_path):
             "Outputs/Publications.base", "Outputs/Presentations.base", "People/Alex Wagner.md"} <= names
     assert "Outputs/citation-history.csv" not in names
     assert not (tmp_path / "Outputs" / "citation-history.csv").exists()
-    (tmp_path / "etal.yaml").write_text("custom: true\n")
+    custom = DEFAULT_CONFIG_TEXT + "# custom\n"
+    (tmp_path / "etal.yaml").write_text(custom)
     assert run(tmp_path, dry_run=False) == []
-    assert (tmp_path / "etal.yaml").read_text() == "custom: true\n"
+    assert (tmp_path / "etal.yaml").read_text() == custom
 
 def test_base_files_follow_obsidian_format(tmp_path):
     run(tmp_path, dry_run=False)
+    pubs = (tmp_path / "Outputs" / "Publications.base").read_text()
+    assert pubs == PUBLICATIONS_BASE
+    assert 'file.inFolder("Outputs/Publications")' in pubs and "name: Publications" in pubs
+    for col in ["title", "date", "journal", "citations", "peer_reviewed", "grants"]:
+        assert f"- {col}" in pubs
+    assert "direction: DESC" in pubs
     text = (tmp_path / "Outputs" / "Presentations.base").read_text()
     assert 'file.inFolder("Outputs/Presentations")' in text
     for col in ["date", "format", "attendance", "event", "presenters", "audience", "grants"]:
@@ -53,3 +61,20 @@ def test_initialized_vault_validates(tmp_path):
     run(tmp_path, dry_run=False)
     r = CliRunner().invoke(main, ["--vault", str(tmp_path), "validate"])
     assert r.exit_code == 0, r.output
+
+def test_init_uses_folders_from_existing_config(tmp_path):
+    custom = DEFAULT_CONFIG_TEXT.replace(
+        "  publications: Outputs/Publications\n", "  publications: Pubs/Papers\n"
+    ).replace("  people: People\n", "  people: Lab/People\n")
+    (tmp_path / "etal.yaml").write_text(custom)
+    created = {p.relative_to(tmp_path).as_posix() for p in run(tmp_path, dry_run=False)}
+    assert {"Pubs/Papers", "Lab/People", "Pubs/Publications.base", "Lab/People/Alex Wagner.md"} <= created
+    assert "etal.yaml" not in created
+    assert 'file.inFolder("Pubs/Papers")' in (tmp_path / "Pubs" / "Publications.base").read_text()
+    assert not (tmp_path / "Outputs" / "Publications").exists()
+    assert not (tmp_path / "People").exists()
+
+def test_init_reports_broken_config_without_traceback(tmp_path):
+    (tmp_path / "etal.yaml").write_text("custom: true\n")
+    r = CliRunner().invoke(main, ["--vault", str(tmp_path), "init"])
+    assert r.exit_code == 1 and "etal.yaml" in r.output and "Traceback" not in r.output
