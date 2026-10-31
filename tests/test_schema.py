@@ -159,3 +159,25 @@ def test_coerce_str():
         coerce_str(True)
     with pytest.raises(ValueError):
         coerce_str(1.5)
+
+def test_people_typed_by_folder(vault_path):
+    from etal import schema
+    from etal.config import load_config
+    # Kori Kuzma has no `type` in the fixture and still loads as a Person.
+    data = schema.load(load_config(vault_path))
+    kori = data.by_name["people"]["Kori Kuzma"]
+    assert "type" not in (kori.note.frontmatter or {})
+    assert kori.aliases == ["Kuzma K", "Kuzma, K", "Kori Kuzma"] and kori.lab_member is True
+    assert not [p for p in data.problems if p.path.parent.name == "People"]
+    # A wrong type is a problem and no record; no frontmatter is a bare Person.
+    (vault_path / "People" / "Wrong Type.md").write_text("---\ntype: meeting-series\n---\n# Wrong Type\n")
+    (vault_path / "People" / "Bare Person.md").write_text("# Bare Person\n")
+    (vault_path / "People" / "Broken Person.md").write_text("---\naliases: [unclosed\n---\n# Broken Person\n")
+    data = schema.load(load_config(vault_path))
+    probs = problems_by_key(data)
+    assert "meeting-series" in probs[("Wrong Type.md", "type")]
+    assert ("Broken Person.md", "type") in probs
+    assert "Wrong Type" not in data.people_by_name and "Broken Person" not in data.people_by_name
+    bare = data.people_by_name["Bare Person"]
+    assert bare.aliases == [] and bare.lab_member is False and bare.name == "Bare Person"
+    assert not any(p.path.name == "Bare Person.md" for p in data.problems)

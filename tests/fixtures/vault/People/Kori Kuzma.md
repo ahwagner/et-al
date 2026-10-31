@@ -1,5 +1,4 @@
 ---
-type: person
 things_tag: Kori Kuzma
 aliases:
   - Kuzma K

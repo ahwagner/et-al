@@ -418,9 +418,15 @@ _BUILDERS: dict[str, Callable[[Note, _Fields], Any]] = {
 }
 
 
-def _type_problem(note: Note, expected: str) -> str | None:
+def _type_problem(note: Note, expected: str, key: str) -> str | None:
     if note.parse_error is not None:
         return f"cannot read frontmatter: {note.parse_error}"
+    if key == "people":
+        # People notes are typed by their folder: no frontmatter or no `type` is fine.
+        actual = note.frontmatter.get("type") if note.frontmatter is not None else None
+        if actual is None or actual == "" or actual == expected:
+            return None
+        return f"is '{actual}' but this folder holds '{expected}'"
     if note.frontmatter is None:
         return f"no frontmatter; expected type: {expected}"
     actual = note.frontmatter.get("type")
@@ -464,7 +470,7 @@ def load(config: Config) -> VaultData:
     # Pass 1: one record per well-formed note, links kept as written.
     for key, expected in FOLDER_TYPES.items():
         for note in read_folder(config.folder(key)):
-            message = _type_problem(note, expected)
+            message = _type_problem(note, expected, key)
             if message is not None:
                 problems.append(Problem(note.path, "type", message))
                 continue
