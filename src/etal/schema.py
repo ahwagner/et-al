@@ -504,6 +504,116 @@ def load(config: Config) -> VaultData:
     return data
 
 
+def _missing(out: list[Problem], record: Any, key: str, present: bool) -> None:
+    if not present:
+        out.append(Problem(record.note.path, key, "required"))
+
+
+def _enum(out: list[Problem], record: Any, key: str, value: str | None, allowed: list[str]) -> None:
+    """A set value must be one of `allowed`. A missing value is the required check's business."""
+    if value is not None and value not in allowed:
+        out.append(Problem(record.note.path, key, f"must be one of: {' | '.join(allowed)}"))
+
+
+def _duplicates(out: list[Problem], items: list[tuple[Any, str, str | None]]) -> None:
+    """Report every (record, key) whose value is also held by a different record."""
+    holders: dict[str, list[tuple[Any, str]]] = {}
+    for record, key, value in items:
+        if value is not None:
+            holders.setdefault(value.casefold(), []).append((record, key))
+    for group in holders.values():
+        if len({id(record) for record, _ in group}) < 2:
+            continue
+        for record, key in group:
+            others = sorted({r.note.name for r, _ in group if r is not record})
+            out.append(Problem(record.note.path, key, f"also used by: {', '.join(others)}"))
+
+
+def _validate_journals(data: VaultData, out: list[Problem]) -> None:
+    for j in data.journals:
+        _missing(out, j, "name", j.name is not None)
+        _missing(out, j, "abbreviation", j.abbreviation is not None)
+        _missing(out, j, "peer_reviewed", j.peer_reviewed is not None)
+    _duplicates(out, [(j, key, getattr(j, key)) for j in data.journals for key in ("issn", "eissn")])
+
+
+def _validate_conferences(data: VaultData, out: list[Problem]) -> None:
+    for c in data.conferences:
+        _missing(out, c, "name", c.name is not None)
+        _missing(out, c, "start", c.start is not None)
+        _missing(out, c, "location", c.location is not None)
+        _missing(out, c, "audience", c.audience is not None)
+        _enum(out, c, "audience", c.audience, AUDIENCES)
+
+
+def _validate_publications(data: VaultData, out: list[Problem], ambiguous: Callable[[Any, str, list[str]], None]) -> None:
+    for pub in data.publications:
+        _missing(out, pub, "title", pub.title is not None)
+        _missing(out, pub, "format", pub.format is not None)
+        _missing(out, pub, "status", pub.status is not None)
+        _missing(out, pub, "date", pub.date is not None)
+        _missing(out, pub, "authors", bool(pub.authors))
+        _missing(out, pub, "journal", pub.journal_link is not None)
+        _enum(out, pub, "format", pub.format, PUBLICATION_FORMATS)
+        _enum(out, pub, "status", pub.status, PUBLICATION_STATUSES)
+        _enum(out, pub, "stage", pub.stage, data.config.stage_names)
+        for key in ("authors", "co_first", "corresponding", "senior"):
+            ambiguous(pub, key, getattr(pub, key))
+    for key in ("doi", "pmid", "scholar_id"):
+        _duplicates(out, [(pub, key, getattr(pub, key)) for pub in data.publications])
+
+
+def _validate_presentations(data: VaultData, out: list[Problem], ambiguous: Callable[[Any, str, list[str]], None]) -> None:
+    for pres in data.presentations:
+        # A hackathon or workshop may carry a blank title, but the property must still be there.
+        blank_ok = pres.format in ("hackathon", "workshop") and "title" in (pres.note.frontmatter or {})
+        _missing(out, pres, "title", pres.title is not None or blank_ok)
+        _missing(out, pres, "date", pres.date is not None)
+        _missing(out, pres, "format", pres.format is not None)
+        _missing(out, pres, "attendance", pres.attendance is not None)
+        _missing(out, pres, "event", pres.event_link is not None)
+        _missing(out, pres, "presenters", bool(pres.presenter_links))
+        _enum(out, pres, "format", pres.format, PRESENTATION_FORMATS)
+        _enum(out, pres, "attendance", pres.attendance, ATTENDANCE)
+        _enum(out, pres, "audience", pres.audience_own, AUDIENCES)
+        event = pres.event
+        if pres.date is not None and event is not None and event.start is not None and event.effective_end is not None:
+            if pres.date.first_day() < event.start.first_day() or pres.date.last_day() > event.effective_end.last_day():
+                span = str(event.start) if event.effective_end == event.start else f"{event.start} to {event.effective_end}"
+                out.append(Problem(pres.note.path, "date", f"{pres.date} is outside {event.note.name} ({span})"))
+        ambiguous(pres, "coauthors", pres.coauthors)
+        ambiguous(pres, "presenters", [p for p in pres.presenters if isinstance(p, str)])
+
+
+def _validate_honors(data: VaultData, out: list[Problem]) -> None:
+    for honor in data.honors:
+        _missing(out, honor, "name", honor.name is not None)
+        _missing(out, honor, "date", honor.date is not None)
+        _missing(out, honor, "result", honor.result is not None)
+        _missing(out, honor, "recipient", honor.recipient_link is not None)
+        _enum(out, honor, "result", honor.result, HONOR_RESULTS)
+        _enum(out, honor, "audience", honor.audience_own, AUDIENCES)
+
+
 def validate(data: VaultData) -> list[Problem]:
-    """Load-time problems now; Task 6 adds the rule checks."""
-    return sorted(data.problems)
+    """Every problem in the vault, sorted: load-time problems plus the rule checks below."""
+    from etal.people import AliasIndex  # people imports this module, so import late
+
+    out = list(data.problems)
+    index = AliasIndex.build(data.people)
+
+    def ambiguous(record: Any, key: str, names: list[str]) -> None:
+        for name in names:
+            found = index.candidates(name)
+            if len(found) > 1:
+                who = ", ".join(sorted(p.note.name for p in found))
+                out.append(Problem(record.note.path, key, f"'{name}' matches more than one person: {who}"))
+
+    _validate_journals(data, out)
+    _validate_conferences(data, out)
+    for award in data.awards:
+        _enum(out, award, "role", award.role, AWARD_ROLES)
+    _validate_publications(data, out, ambiguous)
+    _validate_presentations(data, out, ambiguous)
+    _validate_honors(data, out)
+    return sorted(set(out))
