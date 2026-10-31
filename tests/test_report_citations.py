@@ -97,3 +97,25 @@ def test_merge_superseded_survives_self_link_and_cycle(data):
     r = citations.build(data)
     titles = [row.title for s in r.stages for row in s.rows]
     assert sat1.title in titles and mave.title in titles
+
+
+def test_cli_rejects_unknown_format_and_status(vault_path):
+    fixed(vault_path)
+    r = CliRunner().invoke(main, ["--vault", str(vault_path), "report", "citations", "--format", "article,artcle"])
+    assert r.exit_code != 0
+    assert "artcle" in r.output and "article | preprint | review" in r.output
+    r = CliRunner().invoke(main, ["--vault", str(vault_path), "report", "citations", "--status", "publshed"])
+    assert r.exit_code != 0
+    assert "publshed" in r.output and "published | accepted | submitted | preprint | in preparation" in r.output
+
+
+def test_cli_person_accepts_name_or_wikilink(vault_path):
+    fixed(vault_path)
+    outputs = []
+    for person in ("Kori Kuzma", "[[Kori Kuzma]]"):
+        r = CliRunner().invoke(main, ["--vault", str(vault_path), "report", "citations", "--person", person])
+        assert r.exit_code == 0, r.output
+        outputs.append(r.output)
+    assert outputs[0] == outputs[1]
+    assert outputs[0].startswith("# Citation report for Kori Kuzma\n")
+    assert "Total: 2 papers" in outputs[0]

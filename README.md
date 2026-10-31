@@ -23,7 +23,7 @@ export ETAL_VAULT=~/Obsidian/Wheatley
 - `etal init [--dry-run]`: create `etal.yaml`, any missing configured folders, the two `.base` files, and `People/Alex Wagner.md`; never overwrites. Prints `Nothing to do` when everything exists.
 - `etal validate`: parse every note in the configured folders and report problems as `path: field: message`. Prints `OK: N notes` when clean.
 - `etal sync scholar [--only NOTE] [--force] [--dry-run]`: fetch the Google Scholar profile and update citation counts and Scholar ids on matching publication notes. It refuses to run twice in one day unless `--force` is given.
-- `etal report citations [--output md|csv] [--format FORMATS] [--status STATUSES] [--person NAME] [--as-of] [--to PATH]`: reproduce the Paper Citations sheet, grouped by career stage, with totals. `--format` and `--status` filter publications; `--output` picks Markdown or CSV; `--as-of` adds the oldest citation date to the Markdown.
+- `etal report citations [--output md|csv] [--format FORMATS] [--status STATUSES] [--person NAME] [--as-of] [--to PATH]`: reproduce the Paper Citations sheet, grouped by career stage, with totals. `--format` and `--status` filter publications and reject values the schema does not define; `--person` takes a People note name, bare or as `[[Name]]`; `--output` picks Markdown or CSV; `--as-of` adds the oldest citation date to the Markdown.
 - `etal report quarter QUARTER [--lookback N] [--stdout] [--dry-run]`: draft the quarterly outputs note for a quarter such as `2026-Q3`. `--lookback` is the months before the quarter to check for unlisted items (default 1).
 
 The tool never runs git. Commits are made by the person or agent running it.

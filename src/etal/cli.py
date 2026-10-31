@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from etal import __version__, init_vault, schema
-from etal.config import Config, ConfigError, find_vault, load_config
+from etal.config import Config, ConfigError, find_vault, load_config, parse_wikilink
 from etal.reports import citations as citations_report
 from etal.reports import quarter as quarter_report
 from etal.sync import scholar as scholar_sync
@@ -94,16 +94,28 @@ def _csv_set(ctx, param, value):
     return None if value is None else {item.strip() for item in value.split(",") if item.strip()}
 
 
+def _check_values(option: str, values: set[str] | None, allowed: list[str]) -> None:
+    unknown = sorted(values - set(allowed)) if values else []
+    if unknown:
+        raise click.ClickException(
+            f"{option}: unknown {', '.join(repr(v) for v in unknown)}; must be one of: {' | '.join(allowed)}"
+        )
+
+
 @report.command("citations")
 @click.option("--output", "output", type=click.Choice(["md", "csv"]), default="md", show_default=True)
 @click.option("--format", "formats", callback=_csv_set, default=None, help="Publication formats, comma separated.")
 @click.option("--status", "statuses", callback=_csv_set, default=None, help="Publication statuses, comma separated.")
-@click.option("--person", "person", default=None, help="People note name. Defaults to you.")
+@click.option("--person", "person", default=None, help="People note name, as Name or [[Name]]. Defaults to you.")
 @click.option("--as-of", "as_of", is_flag=True, help="Add the oldest citations_as_of date to the Markdown.")
 @click.option("--to", "to", type=click.Path(path_type=Path), default=None, help="Write to this path instead of printing.")
 @click.pass_context
 def citations_cmd(ctx, output, formats, statuses, person, as_of, to):
     """Publications by career stage with citation counts and authorship flags."""
+    _check_values("--format", formats, schema.PUBLICATION_FORMATS)
+    _check_values("--status", statuses, schema.PUBLICATION_STATUSES)
+    if person is not None:
+        person = parse_wikilink(person) or person.strip()
     _, data = run_validation(_vault_from(ctx))
     try:
         result = citations_report.build(data, person, formats, statuses)
