@@ -59,9 +59,27 @@ Lab members who appear as presenters, awardees, or authors need a `People/` note
 
 `aliases` lists every printed form you have seen for the person, for example for Daniel Puthawala: `Puthawala, D`, `Puthawala D`, `Daniel Puthawala`. Add forms as you meet them in the sources.
 
-Create `People/Alex Wagner.md` with aliases `Wagner AH`, `Wagner A`, `Wagner, AH`, `Wagner, A`, `Alex Wagner`, `Alex H. Wagner`, and `lab_member: true`.
+Create `People/Alex Wagner.md` with aliases `Wagner AH`, `Wagner A`, `Wagner, AH`, `Wagner, A`, `Alex Wagner`, `Alex H. Wagner`, `lab_member: true`, `orcid: 0000-0002-2502-8961`, `scholar_id: cwG4QRAAAAAJ`, and this `tenure`, taken from his ORCID employment record and the biosketch certified in SciENcv on 2026-10-30 (Drive: Funding, Variant search - GREGoRi U01, Submission Documents, Biosketches, `wagner-biosketch.pdf`):
 
-Add `tenure` only when Alex has given the dates. Leave `orcid` and `scholar_id` blank unless known.
+```yaml
+tenure:
+  - start: 2015-01-01
+    end: 2019-07-31
+    role: Postdoctoral Research Fellow, Washington University in St. Louis
+  - start: 2019-08-01
+    end: 2020-08-02
+    role: Instructor of Medicine, Washington University in St. Louis
+  - start: 2020-08-03
+    end: 2026-06-03
+    role: Principal Investigator, Nationwide Children's Hospital; Assistant Professor, The Ohio State University
+  - start: 2026-06-04
+    end:
+    role: Principal Investigator, Nationwide Children's Hospital; Associate Professor, The Ohio State University
+```
+
+The 2019 boundary between fellow and instructor is the month from the biosketch; ORCID records only the single postdoctoral entry. If Alex gives an exact day, use it.
+
+For other people, add `tenure` only when Alex has given the dates. Leave `orcid` and `scholar_id` blank unless known.
 
 ## 4. Awards
 
@@ -77,6 +95,7 @@ For each row of the Paper Citations sheet:
 - `kind: article` unless the record says otherwise (review, book chapter). `status: published`.
 - `citations` from the sheet, with `citations_as_of` set to the day you read the sheet and a `notes` line "citations from the Paper Citations sheet; replace with etal sync scholar".
 - `grants`: blank for now unless the quarterly note or the lab sheet attributes the paper. The RPPR sub-project will revisit attribution.
+- `stage`: leave blank unless the sheet files the paper under a different stage than its date gives. The configured stages are Predoctoral through 2014-12-31, Postdoctoral through 2020-08-02, and Nationwide Children's Hospital from 2020-08-03. The sheet files "Whole-gene sequencing investigation of SAT1 in attempted suicide" (2016) under Predoctoral, so that note gets `stage: Predoctoral`. Check every paper dated 2015 or 2020 against its section in the sheet.
 - The sheet's three flag columns are not stored. They are the check in step 8. Where the sheet says "Yes" under First / co-first and Alex is not `authors[0]`, add his printed name to `co_first`. Where it says "Yes" under Senior / Corresponding and he is not the last author, add his printed name to `corresponding`. Where the sheet says "No" under Peer Reviewed for a paper in a peer-reviewed journal, set `peer_reviewed: false` on the publication and say why in `notes`.
 - Where the sheet gives only a year, the resolved record supplies the date. Where you cannot resolve a paper, create the note with what the sheet has, `authors: []`, and a `notes` line saying so, and list it for Alex.
 
@@ -113,6 +132,7 @@ One note per row of the Awards tab in `Honors/`, named `<date> <award name>`.
 
 - **Date** as in step 6. **Award name** to `name`. **Nominated/Won** lowercased to `result`. **Venue** to `venue`, and link `event` to the conference note when the venue is a meeting that has one. **Audience** lowercased. **Awardee** to `recipient` as a wikilink, matched through aliases. A row with no awardee (the 2022 BOSC free registration) gets no `recipient` and goes on the list for Alex.
 - Honors mentioned in the quarterly notes but not on the tab (Daniel Puthawala's GA4GH travel award in 2026) get notes too, with the date blank if it is not recorded, and are listed for Alex.
+- Alex's own honors are on his biosketch, not the lab sheet. The Honors section of `wagner-biosketch.pdf` (source named in step 3) lists fifteen from 2011 to 2025, each with a year and the awarding body: the 2025 and 2024 Outstanding Junior Faculty Investigator Awards, the 2024 Distinguished Research Mentor Award, the 2021 R35 Genomic Innovator Award, the 2019 K99, the 2019 CGC trainee abstract award, the 2018 ICTS and AACR awards, the 2017 F32, the 2016 and 2011 to 2013 T32 appointments, the 2015 Spriestersbach nomination, and the 2013 Outstanding Student Research Award. Create one note each with `recipient: "[[Alex Wagner]]"`, the year as `date` (`YYYY` is acceptable here; refine when the exact date is known), `result: won` (or `nominated` for Spriestersbach), the awarding body as `venue`, and `audience` by your best reading (national for NIH and AACR, institutional for university and hospital awards). The lab sheet already has the 2024 Distinguished Research Mentor Award with its full date; do not duplicate it.
 
 ## 8. Checks
 

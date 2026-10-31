@@ -177,6 +177,7 @@ grants:
   - "[[CIViC U24]]"
   - "[[R35]]"
 supersedes:              # wikilink to the preprint note this published version replaces
+stage:                   # career stage override, by name from etal.yaml; set when the work predates its publication date
 notes:                   # short free text that reports may print
 ---
 # DGIdb 5.0
@@ -190,6 +191,7 @@ Rules:
 - `authors` entries are the printed form. Matching a printed name to a `People/` note goes through that note's `aliases`.
 - A preprint and its published version are two notes. The published note links the preprint through `supersedes`. The citation report counts the published note and folds the preprint's citations into it only when `etal.yaml` sets `merge_superseded: true` (default false, matching how Scholar usually lists them separately).
 - `pmid` and `volume` are quoted so YAML keeps them as strings.
+- A publication's career stage is the stage in `career_stages` whose range contains `date`, unless `stage` names one. The override exists because the sheet files work by where it was done: the 2016 SAT1 paper is predoctoral work published a year into the postdoc. `etal validate` rejects a `stage` that names no configured stage.
 - Authorship flags are derived, never stored. For a person P with aliases A:
   - first or co-first: `authors[0]` in A, or any name in `co_first` in A.
   - senior or corresponding: any name in `corresponding` in A, or (`senior` empty and `authors[-1]` in A), or any name in `senior` in A.
@@ -289,12 +291,12 @@ Existing `type`, `status`, `stage`, body, and the embedded Bases block are untou
 ```yaml
 self: "[[Alex Wagner]]"
 scholar_profile: cwG4QRAAAAAJ
-career_stages:           # reports group publications by the stage containing date
+career_stages:           # reports group publications by the stage containing date, unless the note sets stage
   - name: Predoctoral
-    until: 2015-06-30
+    until: 2014-12-31    # PhD, University of Iowa, completed 12/2014
   - name: Postdoctoral
-    until: 2020-08-31
-  - name: Nationwide Children's Hospital
+    until: 2020-08-02    # postdoctoral fellow 01/2015 to 07/2019, then Instructor of Medicine, Washington University, to 08/2020
+  - name: Nationwide Children's Hospital   # Principal Investigator from 2020-08-03; Associate Professor from 2026-06-04
 merge_superseded: false
 folders:                 # defaults shown; override only if the vault moves them
   publications: Outputs/Publications
