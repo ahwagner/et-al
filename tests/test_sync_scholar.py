@@ -196,3 +196,8 @@ def test_cli_lists_each_file_written(vault_path):
     lines = r.output.splitlines()
     assert "0 updated, 6 refreshed" in lines
     assert sum(line.startswith("Wrote ") for line in lines) == 7
+
+
+def test_scholarly_imports():
+    # The real fetch path imports scholarly; a dependency drift once broke it with tests still green.
+    import scholarly  # noqa: F401
