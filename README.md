@@ -10,6 +10,8 @@ uv tool install .
 
 For development, run `uv sync` and then `uv run etal --help` and `uv run pytest`.
 
+CI runs the test suite on every push and pull request with `uv sync --locked` followed by `uv run pytest -q`, so `uv.lock` must be up to date.
+
 ## Vault location
 
 Put `--vault PATH` before the command, as in `etal --vault PATH validate`. If it is omitted, the `ETAL_VAULT` environment variable is used.
